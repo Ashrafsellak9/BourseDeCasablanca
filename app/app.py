@@ -36,6 +36,15 @@ st.markdown("""
     .main-header h1 { color: white !important; margin: 0; font-size: 1.9rem; }
     .main-header p  { color: #dde3f0 !important; margin: 4px 0 0 0; }
     footer { visibility: hidden; }
+    .bvc-carousel-card {
+        border: 2px solid #003087; border-radius: 14px; padding: 1.1rem 1.25rem;
+        background: linear-gradient(180deg, #f8fafc 0%, #eef3fb 100%);
+        box-shadow: 0 4px 14px rgba(0,35,102,0.12);
+        min-height: 168px;
+    }
+    .bvc-carousel-meta { color: #5c6b8a; font-size: 0.88rem; margin-bottom: 0.35rem; }
+    .bvc-carousel-title { color: #002366; font-size: 1.15rem; font-weight: 700; margin: 0 0 0.5rem 0; }
+    .bvc-carousel-ind { color: #c62828; font-weight: 600; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -115,10 +124,14 @@ if DATA_OK:
 
     st.divider()
 
-    # ── Top alertes ───────────────────────────────────────────────────────
-    st.subheader("Dernières Anomalies Critiques")
-    top_anom = (df_anom[df_anom['Severite_Finale'].isin(['Critique','Modéré'])]
-                .sort_values('Score_Consensus', ascending=False).head(10))
+    # ── Carrousel alertes critiques + navigation ───────────────────────────
+    st.subheader("Alertes critiques récentes")
+    st.caption("Utilisez ◀ ▶ pour parcourir. Le bouton principal ouvre la page concernée (instrument ou marché).")
+
+    df_crit = df_anom[df_anom['Severite_Finale'] == 'Critique'].copy()
+    if 'Jour' in df_crit.columns:
+        df_crit = df_crit.sort_values('Jour', ascending=False)
+    df_crit = df_crit.head(30).reset_index(drop=True)
 
     def color_sev(val):
         m = {'Critique':'background-color:#FFEBEE;color:#C62828;font-weight:700',
@@ -126,6 +139,84 @@ if DATA_OK:
              'Faible':  'background-color:#FFFDE7;color:#F57F17',
              'Normal':  'color:#388E3C'}
         return m.get(val, '')
+
+    if len(df_crit) == 0:
+        st.success("Aucune alerte critique enregistrée sur la période.")
+    else:
+        n_car = len(df_crit)
+        if "crit_carousel_i" not in st.session_state:
+            st.session_state.crit_carousel_i = 0
+        if st.session_state.crit_carousel_i >= n_car:
+            st.session_state.crit_carousel_i = max(0, n_car - 1)
+        st.session_state.crit_carousel_i = int(st.session_state.crit_carousel_i) % n_car
+
+        c_prev, c_card, c_next = st.columns([0.5, 5.5, 0.5])
+        with c_prev:
+            if st.button("◀", key="crit_car_prev", help="Alerte précédente"):
+                st.session_state.crit_carousel_i = (st.session_state.crit_carousel_i - 1) % n_car
+                st.rerun()
+        with c_next:
+            if st.button("▶", key="crit_car_next", help="Alerte suivante"):
+                st.session_state.crit_carousel_i = (st.session_state.crit_carousel_i + 1) % n_car
+                st.rerun()
+
+        with c_card:
+            row = df_crit.iloc[st.session_state.crit_carousel_i]
+            jour_s = pd.to_datetime(row["Jour"]).strftime("%Y-%m-%d") if pd.notna(row.get("Jour")) else "—"
+            tkr = row.get("Ticker", "")
+            tkr = "" if pd.isna(tkr) else str(tkr).strip()
+            lib = row.get("Libelle", "")
+            lib = "" if pd.isna(lib) else str(lib).strip()
+            niv = row.get("Niveau", "")
+            niv = "" if pd.isna(niv) else str(niv).strip()
+            ind = row.get("Indicateur", "")
+            ind = "" if pd.isna(ind) else str(ind).strip()
+            val = row.get("Valeur", "")
+            sc = row.get("Score_Consensus", "")
+            desc = row.get("Description", "")
+            desc = "" if pd.isna(desc) else str(desc).strip()
+            titre_disp = f"{tkr}" + (f" — {lib}" if lib else "")
+
+            st.markdown(
+                f'<div class="bvc-carousel-card">'
+                f'<div class="bvc-carousel-meta">Critique · {jour_s} · {niv}</div>'
+                f'<div class="bvc-carousel-title">{titre_disp}</div>'
+                f'<div class="bvc-carousel-ind">{ind}</div>'
+                f'<p style="margin:0.4rem 0 0.2rem 0;color:#333;font-size:0.95rem;">{desc[:220]}{"…" if len(desc) > 220 else ""}</p>'
+                f'<p style="margin:0;color:#555;font-size:0.9rem;">Valeur : <b>{val}</b> &nbsp;·&nbsp; Consensus : <b>{sc}</b></p>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+            st.caption(f"Carte {st.session_state.crit_carousel_i + 1} / {n_car}")
+
+            link_cols = st.columns([1, 1, 1])
+            t_up = tkr.upper() if tkr else ""
+            car_key = st.session_state.crit_carousel_i
+            with link_cols[0]:
+                if t_up and t_up not in ("MARCHE", "MARCHÉ", "MARKET"):
+                    if st.button(f"🔍 Ouvrir {tkr}", key=f"nav_instr_{car_key}_{t_up}", type="primary"):
+                        st.session_state["_nav_ticker"] = tkr
+                        st.switch_page("pages/2_Instruments.py")
+                elif t_up in ("MARCHE", "MARCHÉ", "MARKET") or (niv and "march" in niv.lower()):
+                    if st.button("📈 Vue marché global", key=f"nav_marche_{car_key}", type="primary"):
+                        if jour_s != "—":
+                            st.session_state["_nav_jour"] = jour_s
+                        st.switch_page("pages/1_Marche_Global.py")
+                else:
+                    if st.button("🚨 Centre d'alertes", key=f"nav_alert_{car_key}", type="primary"):
+                        st.switch_page("pages/3_Alertes.py")
+            with link_cols[1]:
+                if st.button("📋 Toutes les alertes", key=f"nav_all_alert_{car_key}"):
+                    st.switch_page("pages/3_Alertes.py")
+            with link_cols[2]:
+                if st.button("📑 Liste instruments", key=f"nav_instr_list_{car_key}"):
+                    st.switch_page("pages/2_Instruments.py")
+
+    st.divider()
+    st.subheader("Tableau — anomalies critiques / modérées (top 10)")
+    top_anom = (df_anom[df_anom['Severite_Finale'].isin(['Critique','Modéré'])]
+                .sort_values('Score_Consensus', ascending=False).head(10))
 
     if len(top_anom) > 0:
         cols_show = [c for c in ['Jour','Ticker','Libelle','Niveau','Indicateur',
@@ -136,7 +227,7 @@ if DATA_OK:
             use_container_width=True, height=340,
         )
     else:
-        st.success("Aucune anomalie critique.")
+        st.success("Aucune anomalie critique ou modérée dans le top 10.")
 
     st.divider()
 

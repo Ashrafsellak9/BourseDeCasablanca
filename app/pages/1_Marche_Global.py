@@ -29,20 +29,32 @@ st.caption("Indicateurs agrégés BVC 2025 — MASI, MASI 20, Volumes, Breadth")
 
 from app.utils.data_cache import load_base_data
 from app.utils.charts import chart_masi, chart_volume_marche, BVC_BLUE, BVC_GOLD
+from app.utils.streamlit_nav import get_query_param
 
 data       = load_base_data()
 df_market  = data['market'].copy()
 df_market['Jour'] = pd.to_datetime(df_market['Jour'])
 
 # ── Filtres sidebar ───────────────────────────────────────────────────────
+date_min = df_market['Jour'].min().date()
+date_max = df_market['Jour'].max().date()
+default_dates = [date_min, date_max]
+jour_qp = st.session_state.pop("_nav_jour", None) or get_query_param("jour")
+if jour_qp:
+    try:
+        jd = pd.to_datetime(jour_qp).date()
+        if date_min <= jd <= date_max:
+            default_dates = [jd, jd]
+    except Exception:
+        pass
+
 with st.sidebar:
     st.header("🔧 Filtres")
-    date_min = df_market['Jour'].min().date()
-    date_max = df_market['Jour'].max().date()
     d_start, d_end = st.date_input(
         "Période d'analyse",
-        value=[date_min, date_max],
-        min_value=date_min, max_value=date_max,
+        value=default_dates,
+        min_value=date_min,
+        max_value=date_max,
     )
     indice_sel = st.selectbox("Indice", ["MASI", "MSI20", "Les deux"])
 

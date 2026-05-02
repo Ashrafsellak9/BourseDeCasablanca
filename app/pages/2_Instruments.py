@@ -27,6 +27,7 @@ st.caption("Profil complet d'un titre : cours, volatilité, liquidité, flux d'o
 
 from app.utils.data_cache import load_base_data
 from app.utils.charts import chart_instrument_profile, chart_scatter_risk, chart_oir_heatmap
+from app.utils.streamlit_nav import get_query_param
 
 data      = load_base_data()
 df_instr  = data['instrument'].copy()
@@ -43,9 +44,19 @@ tickers_info = (df_instr.groupby('Ticker')
                 .reset_index())
 options = [f"{r.Ticker} — {r.Libelle}" for _, r in tickers_info.iterrows()]
 
+ticker_url = st.session_state.pop("_nav_ticker", None) or get_query_param("ticker")
+sel_index = 0
+if ticker_url:
+    tu = str(ticker_url).strip().upper()
+    for i, opt in enumerate(options):
+        code = opt.split(" — ")[0].strip().upper()
+        if code == tu:
+            sel_index = i
+            break
+
 with st.sidebar:
     st.header("🔧 Sélection")
-    sel = st.selectbox("Instrument", options, index=0)
+    sel = st.selectbox("Instrument", options, index=sel_index, key="sidebar_instrument_select")
     ticker = sel.split(' — ')[0].strip()
 
     date_min = df_instr['Jour'].min().date()
