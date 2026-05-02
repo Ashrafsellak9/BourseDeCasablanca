@@ -388,3 +388,47 @@ def gauge_market_stress(score: float, regime: str) -> go.Figure:
     fig.update_layout(height=280, margin=dict(l=24, r=24, t=40, b=16))
     return fig
 
+
+def chart_market_quality_mini(df_market: pd.DataFrame, n_sessions: int = 22) -> go.Figure:
+    """
+    Qualité marché = 100 − stress (plus haut = mieux). Dernières séances pour lecture tendance.
+    """
+    if "Market_Quality_Score" not in df_market.columns:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Score qualité absent.",
+            xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False,
+        )
+        fig.update_layout(height=200)
+        return fig
+
+    d = (
+        df_market.sort_values("Jour")
+        .dropna(subset=["Market_Quality_Score"])
+        .tail(n_sessions)
+    )
+    fig = go.Figure(
+        go.Scatter(
+            x=d["Jour"],
+            y=d["Market_Quality_Score"],
+            mode="lines+markers",
+            line=dict(color="#1B5E20", width=2.2),
+            marker=dict(size=6, color="#2E7D32"),
+            fill="tozeroy",
+            fillcolor="rgba(46,125,50,0.1)",
+            hovertemplate="%{x|%Y-%m-%d}<br>Qualité: %{y:.1f}/100<extra></extra>",
+        )
+    )
+    fig.add_hline(y=50, line_dash="dash", line_color="#9E9E9E", opacity=0.7)
+    fig.update_layout(
+        title="Qualité du marché (100 = meilleur)",
+        height=240,
+        yaxis=dict(range=[0, 100], title=""),
+        xaxis_title="",
+        margin=dict(l=12, r=12, t=44, b=8),
+        showlegend=False,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+    )
+    return fig
+

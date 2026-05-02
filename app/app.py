@@ -62,10 +62,11 @@ from app.utils.charts import (
     chart_masi,
     chart_volume_marche,
     chart_market_stress,
+    chart_market_quality_mini,
     gauge_market_stress,
     SEV_COLORS,
 )
-from src.market_stress import stress_summary_latest
+from src.market_stress import stress_summary_latest, market_quality_trend_5d
 
 try:
     data = load_base_data()
@@ -138,6 +139,31 @@ if DATA_OK:
             chart_market_stress(df_market),
             use_container_width=True,
         )
+
+        st.markdown("##### Tendance de la qualité du marché (5 séances)")
+        tr = market_quality_trend_5d(df_market)
+        t_left, t_right = st.columns([1.15, 2])
+        with t_left:
+            if tr.get("available") and tr.get("trend_delta") is not None:
+                st.metric(
+                    "Évolution qualité",
+                    tr["trend_label"],
+                    delta=f"{tr['trend_delta']:+.1f} pts (échelle 0–100)",
+                    delta_color="normal",
+                )
+                st.caption(f"Méthode : {tr.get('method', '')}")
+                if tr.get("quality_last") is not None:
+                    st.caption(f"Qualité actuelle : **{tr['quality_last']:.1f}** / 100")
+            else:
+                st.info(tr.get("trend_label", "—"))
+                if tr.get("method"):
+                    st.caption(tr["method"])
+        with t_right:
+            st.plotly_chart(
+                chart_market_quality_mini(df_market),
+                use_container_width=True,
+            )
+
         st.divider()
 
     # ── KPIs ML (si disponibles) ─────────────────────────────────────────

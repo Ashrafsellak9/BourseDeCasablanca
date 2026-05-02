@@ -32,11 +32,12 @@ from app.utils.charts import (
     chart_masi,
     chart_volume_marche,
     chart_market_stress,
+    chart_market_quality_mini,
     gauge_market_stress,
     BVC_BLUE,
     BVC_GOLD,
 )
-from src.market_stress import stress_summary_latest
+from src.market_stress import stress_summary_latest, market_quality_trend_5d
 from app.utils.streamlit_nav import get_query_param
 
 data       = load_base_data()
@@ -98,6 +99,29 @@ if "Market_Stress_Score" in df_f.columns and len(df_f) > 0:
             "Market Stress (fin de période affichée)",
             f"{float(sc_f):.1f} / 100",
             delta=str(summ_f.get("Market_Stress_Regime", "")),
+        )
+
+# Tendance qualité sur l'historique complet (5 séances glissantes — cohérent avec l'accueil)
+if "Market_Quality_Score" in df_market.columns and len(df_market) >= 6:
+    tr_full = market_quality_trend_5d(df_market)
+    q1, q2 = st.columns([1, 1.8])
+    with q1:
+        if tr_full.get("available") and tr_full.get("trend_delta") is not None:
+            st.metric(
+                "Tendance qualité marché (5 séances)",
+                tr_full["trend_label"],
+                delta=f"{tr_full['trend_delta']:+.1f} pts",
+                delta_color="normal",
+            )
+            st.caption(tr_full.get("method", ""))
+        else:
+            st.caption(tr_full.get("trend_label", "—"))
+            if tr_full.get("method"):
+                st.caption(tr_full["method"])
+    with q2:
+        st.plotly_chart(
+            chart_market_quality_mini(df_market),
+            use_container_width=True,
         )
 
 st.divider()
@@ -211,6 +235,26 @@ with tab4:
                 )
         with c_ch:
             st.plotly_chart(chart_market_stress(df_f), use_container_width=True)
+        if "Market_Quality_Score" in df_f.columns and len(df_f) >= 6:
+            tr_f = market_quality_trend_5d(df_f)
+            st.markdown("##### Tendance qualité (5 séances) — sur la période filtrée")
+            t1, t2 = st.columns([1, 2])
+            with t1:
+                if tr_f.get("available") and tr_f.get("trend_delta") is not None:
+                    st.metric(
+                        "Évolution qualité",
+                        tr_f["trend_label"],
+                        delta=f"{tr_f['trend_delta']:+.1f} pts",
+                        delta_color="normal",
+                    )
+                    st.caption(tr_f.get("method", ""))
+                else:
+                    st.caption(tr_f.get("trend_label", "—"))
+            with t2:
+                st.plotly_chart(
+                    chart_market_quality_mini(df_f),
+                    use_container_width=True,
+                )
     else:
         st.info("Scores de stress non disponibles (données marché ou flux d'ordres insuffisants).")
 
@@ -218,7 +262,7 @@ with tab5:
     display_cols = [c for c in [
         'Jour', 'MASI', 'MSI20', 'MASI_Return_pct', 'MASI_Vol_20j',
         'Volume_MAD', 'Volume_Relatif_Marche', 'Breadth_pct', 'HHI_Volume',
-        'Market_Stress_Score', 'Stress_Vol', 'Stress_Breadth', 'Stress_OIR',
+        'Market_Stress_Score', 'Market_Quality_Score', 'Stress_Vol', 'Stress_Breadth', 'Stress_OIR',
         'OIR_Marche_MeanAbs', 'Market_Stress_Regime',
     ] if c in df_f.columns]
     df_show = df_f[display_cols].sort_values('Jour', ascending=False).reset_index(drop=True)

@@ -94,7 +94,86 @@ def enrich_market_stress_score(
         return "Calme"
 
     out["Market_Stress_Regime"] = out["Market_Stress_Score"].map(_regime)
+    # Qualité = inverse du stress (100 = meilleure qualité perçue)
+    out["Market_Quality_Score"] = 100.0 - out["Market_Stress_Score"]
     return out
+
+
+def market_quality_trend_5d(df_enriched: pd.DataFrame, eps: float = 1.25) -> dict:
+    """
+    Tendance de la qualité du marché sur **5 séances** (fenêtre glissante).
+
+    Définition
+    ----------
+    - ``Market_Quality_Score = 100 - Market_Stress_Score`` (plus haut = mieux).
+    - **Delta 5s** : moyenne des 5 dernières séances **moins** moyenne des 5 séances
+      précédentes (donc besoin d'au moins 10 lignes avec score valide).
+    - Si 6 ≤ N < 10 : repli sur ``Q_t - Q_{t-5}`` (écart entre dernière séance et
+      celle d'il y a 5 jours de cotation).
+
+    Libellé (seuil ``eps`` en points de qualité sur l'échelle 0–100)
+    ----------
+    - Δ > +eps  → **Amélioration**
+    - Δ < -eps  → **Dégradation**
+    - sinon     → **Stable**
+    """
+    empty = {
+        "available": False,
+        "trend_label": "—",
+        "trend_delta": None,
+        "quality_last": None,
+        "quality_mean_5d": None,
+        "quality_mean_prev5d": None,
+        "method": "",
+    }
+    if df_enriched.empty or "Market_Stress_Score" not in df_enriched.columns:
+        return empty
+
+    d = (
+        df_enriched.sort_values("Jour")
+        .dropna(subset=["Market_Stress_Score"])
+        .reset_index(drop=True)
+    )
+    if d.empty:
+        return empty
+    vals = (100.0 - d["Market_Stress_Score"].astype(float)).to_numpy()
+    n = len(vals)
+
+    delta = None
+    method = ""
+    if n >= 10:
+        recent = float(np.mean(vals[-5:]))
+        prior = float(np.mean(vals[-10:-5]))
+        delta = recent - prior
+        method = "moyenne(5 dernières) − moyenne(5 précédentes)"
+    elif n >= 6:
+        delta = float(vals[-1] - vals[-6])
+        method = "dernière séance − séance t−5"
+    else:
+        return {
+            **empty,
+            "available": False,
+            "trend_label": "Historique insuffisant",
+            "quality_last": float(vals[-1]),
+            "method": f"{n} séance(s) — minimum 6 requis",
+        }
+
+    if delta > eps:
+        label = "Amélioration"
+    elif delta < -eps:
+        label = "Dégradation"
+    else:
+        label = "Stable"
+
+    return {
+        "available": True,
+        "trend_label": label,
+        "trend_delta": float(delta),
+        "quality_last": float(vals[-1]),
+        "quality_mean_5d": float(np.mean(vals[-5:])) if n >= 5 else float(vals[-1]),
+        "quality_mean_prev5d": float(np.mean(vals[-10:-5])) if n >= 10 else None,
+        "method": method,
+    }
 
 
 def stress_summary_latest(df_enriched: pd.DataFrame) -> dict:
