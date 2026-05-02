@@ -15,5 +15,5 @@ if not exist "%STREAMLIT%" (
 cd /d "%~dp0\app"
 echo Lancement sur http://localhost:8501
 echo.
-"%STREAMLIT%" run app.py --server.port 8501 --browser.gatherUsageStats false
+"%STREAMLIT%" run Accueil.py --server.port 8501 --browser.gatherUsageStats false
 pause

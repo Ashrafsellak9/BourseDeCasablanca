@@ -1,28 +1,23 @@
 """
-Page 1 — Vue Marché Global
+Page 1 — Marché BVC (vue agrégée)
 """
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import streamlit as st
+
+from app.utils.bvc_theme import inject_bvc_theme
+
+inject_bvc_theme()
+
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 
-# page_config is set in app.py
-
-st.markdown("""
-<style>
-    [data-testid="stSidebar"] { background: #002366; }
-    [data-testid="stSidebar"] * { color: #fff !important; }
-    div[data-testid="metric-container"] {
-        background:#EAF0FB;border-radius:8px;padding:12px;border-left:4px solid #003087;
-    }
-    footer { visibility: hidden; }
-</style>""", unsafe_allow_html=True)
+# page_config défini dans Accueil.py
 
 st.title("📈 Vue Marché Global")
 st.caption(

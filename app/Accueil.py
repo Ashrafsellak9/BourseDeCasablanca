@@ -1,6 +1,6 @@
 """
 Système de Surveillance Intelligent — Bourse de Casablanca
-Point d'entrée principal de l'application Streamlit.
+Point d'entrée principal de l'application Streamlit (menu : Accueil).
 """
 from pathlib import Path
 
@@ -11,9 +11,13 @@ try:
 except ImportError:
     pass
 
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import streamlit as st
 
-# set_page_config MUST be the very first Streamlit call
+# set_page_config doit être le premier appel Streamlit utile après imports.
 st.set_page_config(
     page_title="BVC Surveillance",
     page_icon="📊",
@@ -21,47 +25,21 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Imports après page_config ─────────────────────────────────────────────
-import sys
+from app.utils.bvc_theme import inject_bvc_theme
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+inject_bvc_theme(home=True)
+
+# ── Imports après page_config ─────────────────────────────────────────────
 
 import pandas as pd
-
-# ── CSS BVC ───────────────────────────────────────────────────────────────
-st.markdown("""
-<style>
-    [data-testid="stSidebar"] { background: #002366 !important; }
-    [data-testid="stSidebar"] * { color: #ffffff !important; }
-    [data-testid="stSidebarNav"] a { color: #C8A84B !important; font-weight:600; }
-    div[data-testid="metric-container"] {
-        background: #EAF0FB; border-radius: 8px; padding: 12px;
-        border-left: 4px solid #003087;
-    }
-    .main-header {
-        background: linear-gradient(135deg, #002366 0%, #003087 60%, #C8A84B 100%);
-        padding: 20px 30px; border-radius: 10px; margin-bottom: 20px;
-    }
-    .main-header h1 { color: white !important; margin: 0; font-size: 1.9rem; }
-    .main-header p  { color: #dde3f0 !important; margin: 4px 0 0 0; }
-    footer { visibility: hidden; }
-    .bvc-carousel-card {
-        border: 2px solid #003087; border-radius: 14px; padding: 1.1rem 1.25rem;
-        background: linear-gradient(180deg, #f8fafc 0%, #eef3fb 100%);
-        box-shadow: 0 4px 14px rgba(0,35,102,0.12);
-        min-height: 168px;
-    }
-    .bvc-carousel-meta { color: #5c6b8a; font-size: 0.88rem; margin-bottom: 0.35rem; }
-    .bvc-carousel-title { color: #002366; font-size: 1.15rem; font-weight: 700; margin: 0 0 0.5rem 0; }
-    .bvc-carousel-ind { color: #c62828; font-weight: 600; }
-</style>
-""", unsafe_allow_html=True)
 
 # ── Header ────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="main-header">
-    <h1>&#128202; Bourse de Casablanca — Surveillance Intelligente</h1>
-    <p>Analyse des flux d'ordres &middot; Détection d'anomalies &middot; Indicateurs temps réel</p>
+    <h1 style="color:#ffffff !important;margin:0;font-size:1.85rem;">&#128202; Bourse de Casablanca — Surveillance Intelligente</h1>
+    <p style="color:#f1f5ff !important;margin:6px 0 0 0;font-size:0.95rem;line-height:1.45;">
+        Analyse des flux d'ordres &middot; Détection d'anomalies &middot; Indicateurs temps réel
+    </p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -225,11 +203,14 @@ if DATA_OK:
     df_crit = df_crit.head(30).reset_index(drop=True)
 
     def color_sev(val):
-        m = {'Critique':'background-color:#FFEBEE;color:#C62828;font-weight:700',
-             'Modéré':  'background-color:#FFF3E0;color:#E65100;font-weight:600',
-             'Faible':  'background-color:#FFFDE7;color:#F57F17',
-             'Normal':  'color:#388E3C'}
-        return m.get(val, '')
+        m = {
+            "Critique": "background-color:#FFEBEE;color:#C62828;font-weight:700",
+            "Modéré": "background-color:#FFF3E0;color:#E65100;font-weight:600",
+            "Modere": "background-color:#FFF3E0;color:#E65100;font-weight:600",
+            "Faible": "background-color:#FFFDE7;color:#F57F17",
+            "Normal": "background-color:#E8F5E9;color:#2E7D32",
+        }
+        return m.get(val, "")
 
     if len(df_crit) == 0:
         st.success("Aucune alerte critique enregistrée sur la période.")
@@ -273,8 +254,8 @@ if DATA_OK:
                 f'<div class="bvc-carousel-meta">Critique · {jour_s} · {niv}</div>'
                 f'<div class="bvc-carousel-title">{titre_disp}</div>'
                 f'<div class="bvc-carousel-ind">{ind}</div>'
-                f'<p style="margin:0.4rem 0 0.2rem 0;color:#333;font-size:0.95rem;">{desc[:220]}{"…" if len(desc) > 220 else ""}</p>'
-                f'<p style="margin:0;color:#555;font-size:0.9rem;">Valeur : <b>{val}</b> &nbsp;·&nbsp; Consensus : <b>{sc}</b></p>'
+                f'<p class="bvc-carousel-desc">{desc[:220]}{"…" if len(desc) > 220 else ""}</p>'
+                f'<p class="bvc-carousel-meta2">Valeur : <b>{val}</b> &nbsp;·&nbsp; Consensus : <b>{sc}</b></p>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -293,7 +274,7 @@ if DATA_OK:
                     if st.button("📈 Vue marché global", key=f"nav_marche_{car_key}", type="primary"):
                         if jour_s != "—":
                             st.session_state["_nav_jour"] = jour_s
-                        st.switch_page("pages/1_Marche_Global.py")
+                        st.switch_page("pages/1_Marche_BVC.py")
                 else:
                     if st.button("🚨 Centre d'alertes", key=f"nav_alert_{car_key}", type="primary"):
                         st.switch_page("pages/3_Alertes.py")
@@ -328,8 +309,8 @@ if DATA_OK:
     c1.info("**📈 Marché Global**\nMASI, volumes, breadth, concentration")
     c2.info("**🔍 Instruments**\nProfil complet par titre")
     c3.info("**🚨 Centre d'Alertes**\nToutes les anomalies détectées")
-    c4.info("**🤖 Machine Learning**\nIsolation Forest + Autoencoder")
-    c5.info("**📤 Upload Excel**\nImporter un nouveau fichier")
+    c4.info("**🤖 Détection ML**\nIsolation Forest + Autoencoder")
+    c5.info("**📤 Import des données**\nFichier Excel, pipeline automatique")
 
     st.caption("Naviguez via le menu de gauche | Données : DATASET-2025.xlsx")
 

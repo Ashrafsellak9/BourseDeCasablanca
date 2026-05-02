@@ -1,7 +1,7 @@
 """
-Page 4 — Upload Excel + Pipeline Automatique
-Permet d'importer un nouveau fichier du même format que DATASET-2025.xlsx
-et calcule automatiquement tous les indicateurs + anomalies.
+Page 4 — Import des données + pipeline automatique
+Import d'un fichier Excel au format DATASET-2025.xlsx
+et calcul automatique des indicateurs et anomalies.
 """
 import sys
 from pathlib import Path
@@ -11,21 +11,10 @@ import streamlit as st
 import pandas as pd
 import io
 
-# page_config is set in app.py
-st.markdown("""
-<style>
-    [data-testid="stSidebar"] { background: #002366; }
-    [data-testid="stSidebar"] * { color: #fff !important; }
-    div[data-testid="metric-container"] {
-        background:#EAF0FB;border-radius:8px;padding:12px;border-left:4px solid #003087;
-    }
-    .upload-zone {
-        border: 2px dashed #C8A84B; border-radius: 12px;
-        padding: 30px; text-align: center; background: #FAFBFF;
-        margin: 20px 0;
-    }
-    footer { visibility: hidden; }
-</style>""", unsafe_allow_html=True)
+from app.utils.bvc_theme import UPLOAD_ZONE_CSS, inject_bvc_theme
+
+# page_config défini dans Accueil.py
+inject_bvc_theme(extra_css=UPLOAD_ZONE_CSS)
 
 st.title("📤 Import & Analyse Automatique")
 st.caption("Importez un nouveau fichier Excel au même format que DATASET-2025 — calcul automatique de tous les indicateurs")

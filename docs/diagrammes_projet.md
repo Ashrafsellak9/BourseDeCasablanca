@@ -157,13 +157,13 @@ flowchart TB
 
 | UC   | Description courte                         | Pages / modules principaux      |
 |------|---------------------------------------------|-----------------------------------|
-| UC1–3 | Tableau de bord, stress, MASI, volumes     | `app.py`, `1_Marche_Global.py`, `charts.py`, `market_stress.py` |
+| UC1–3 | Tableau de bord, stress, MASI, volumes     | `Accueil.py`, `1_Marche_BVC.py`, `charts.py`, `market_stress.py` |
 | UC4–5 | Instrument, flux d’ordres                  | `2_Instruments.py`, `indicators.py` |
 | UC7–9 | Anomalies, alertes, notifications          | `3_Alertes.py`, `anomaly_detector.py`, `critical_alert_notifier.py`, `notifications.py` |
-| UC10 | ML                                         | `5_Machine_Learning.py`, `ml_models.py`, notebooks `04_*` |
-| UC11 | Upload                                     | `4_Upload_Excel.py`, `data_cache.process_uploaded_file` |
+| UC10 | ML                                         | `5_Detection_ML.py`, `ml_models.py`, notebooks `04_*` |
+| UC11 | Import données                             | `4_Import_donnees.py`, `data_cache.process_uploaded_file` |
 | UC12 | Données / seuils                           | Parquets, `seuils_phase3.csv`, exports notebook |
-| UC13 | Prévision volume                           | `1_Marche_Global.py`, `volume_forecast.py` |
+| UC13 | Prévision volume                           | `1_Marche_BVC.py`, `volume_forecast.py` |
 
 ---
 
@@ -174,12 +174,12 @@ Vue **multicouche** : présentation, orchestration cache, domaine métier, persi
 ```mermaid
 flowchart TB
     subgraph PRES["Presentation Streamlit"]
-        APP[app.py accueil]
-        P1[1_Marche_Global]
+        APP[Accueil.py accueil]
+        P1[1_Marche_BVC]
         P2[2_Instruments]
         P3[3_Alertes]
-        P4[4_Upload_Excel]
-        P5[5_Machine_Learning]
+        P4[4_Import_donnees]
+        P5[5_Detection_ML]
         NAV[streamlit_nav]
         CH[charts Plotly]
     end

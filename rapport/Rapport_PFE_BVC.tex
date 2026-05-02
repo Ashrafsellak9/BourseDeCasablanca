@@ -326,7 +326,7 @@ Module \texttt{src/anomaly\_detector.py}. Export \texttt{anomalies\_statistiques
 \end{figure}
 
 \section{Phase 4 --- Tableau de bord Streamlit}
-Répertoire \texttt{app/} : \texttt{app.py} (accueil), pages \texttt{1\_Marche\_Global.py}, \texttt{2\_Instruments.py}, \texttt{3\_Alertes.py}, \texttt{4\_Upload\_Excel.py}, \texttt{5\_Machine\_Learning.py}. Utilitaires \texttt{data\_cache.py} (cache \texttt{@st.cache\_data}) et \texttt{charts.py} (Plotly).
+Répertoire \texttt{app/} : \texttt{Accueil.py} (accueil), pages \texttt{1\_Marche\_BVC.py}, \texttt{2\_Instruments.py}, \texttt{3\_Alertes.py}, \texttt{4\_Import\_donnees.py}, \texttt{5\_Detection\_ML.py}. Utilitaires \texttt{data\_cache.py} (cache \texttt{@st.cache\_data}) et \texttt{charts.py} (Plotly).
 
 Le fichier \texttt{run\_app.bat} lance Streamlit depuis l'environnement approprié.
 
@@ -468,7 +468,7 @@ Vérifier que les fichiers PNG sont bien présents dans \texttt{../reports/}.
 Exécuter \texttt{run\_app.bat} à la racine du projet ou :
 \begin{lstlisting}
 cd app
-streamlit run app.py
+streamlit run Accueil.py
 \end{lstlisting}
 
 \end{document}

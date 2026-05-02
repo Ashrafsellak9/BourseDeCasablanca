@@ -1,5 +1,5 @@
 """
-Page 5 — Machine Learning : Détection d'Anomalies ML
+Page 5 — Détection d'anomalies (ML)
 Affiche les résultats des modèles Isolation Forest et Autoencoder.
 """
 import sys
@@ -7,6 +7,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import streamlit as st
+
+from app.utils.bvc_theme import inject_bvc_theme
+
+inject_bvc_theme()
+
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -14,6 +19,8 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 
 from app.utils.data_cache import load_base_data
+
+# page_config défini dans Accueil.py
 
 # ── Constantes couleurs ──────────────────────────────────────────────────────
 BVC_BLUE = "#002366"
@@ -51,10 +58,10 @@ def load_ml_data():
 # ══════════════════════════════════════════════════════════════════════════════
 
 st.markdown(f"""
-<div style="background:linear-gradient(135deg,{BVC_BLUE} 0%,#1a3a70 60%,{BVC_GOLD} 100%);
-     padding:18px 24px;border-radius:10px;margin-bottom:16px;">
-  <h2 style="color:white;margin:0;font-size:1.5rem;">🤖 Machine Learning — Détection d'Anomalies</h2>
-  <p style="color:#dde3f0;margin:4px 0 0 0;font-size:.9rem;">
+<div class="bvc-hero-banner" style="background:linear-gradient(135deg,{BVC_BLUE} 0%,#1a3a70 60%,{BVC_GOLD} 100%);
+     padding:18px 24px;border-radius:10px;margin-bottom:16px;margin-top:0;">
+  <h2 style="margin:0;font-size:1.5rem;color:#ffffff !important;">🤖 Détection d'anomalies (ML)</h2>
+  <p style="margin:8px 0 0 0;font-size:0.95rem;line-height:1.45;color:#f1f5ff !important;">
     Isolation Forest &middot; Autoencoder &middot; Score Combiné ML
   </p>
 </div>
