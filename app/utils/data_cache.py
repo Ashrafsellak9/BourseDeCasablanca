@@ -49,17 +49,48 @@ from src.instrument_segment import (
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
 
 
+def orderflow_files_fingerprint() -> tuple[int, int]:
+    """
+    Empreinte (mtime ns) des Parquets orderflow + intraday.
+    Sert de clé de cache pour get_orderflow_for_ui : recalcul si les fichiers changent.
+    """
+    ofp = DATA_DIR / "orderflow_indicators.parquet"
+    intra = DATA_DIR / "intraday_enrichis.parquet"
+    t_of = ofp.stat().st_mtime_ns if ofp.exists() else 0
+    t_in = intra.stat().st_mtime_ns if intra.exists() else 0
+    return (t_of, t_in)
+
+
+@st.cache_data(show_spinner="Flux d'ordres — calcul spoofing (long la 1ère fois)...")
+def get_orderflow_for_ui(fprint: tuple[int, int]) -> pd.DataFrame:
+    """
+    Lit orderflow_indicators.parquet et ajoute Spoof_* via intraday si absent.
+
+    Volontairement **hors** de `load_base_data` : le calcul spoofing sur toute la
+    bande transactionnelle peut prendre plusieurs minutes ; l'accueil et les autres
+    pages restent réactifs. Utiliser sur la page Instruments (onglet flux d'ordres).
+    """
+    _ = fprint  # clé de cache uniquement
+    orderflow = pd.read_parquet(DATA_DIR / "orderflow_indicators.parquet")
+    if orderflow.empty or "Spoof_Intensity_pct" in orderflow.columns:
+        return orderflow
+    return enrich_orderflow_spoofing(orderflow, DATA_DIR)
+
+
 @st.cache_data(show_spinner="Chargement des données 2025...")
 def load_base_data():
-    """Charge les DataFrames depuis Parquet et enrichit le marché (Market Stress Score)."""
+    """
+    Charge les DataFrames depuis Parquet et enrichit le marché (Market Stress Score).
+
+    Le flux d'ordres est lu **sans** recalcul spoofing : voir `get_orderflow_for_ui`
+    si les colonnes Spoof_* sont nécessaires (évite de bloquer le démarrage).
+    """
     market = pd.read_parquet(DATA_DIR / "market_indicators.parquet")
     if not market.empty and "Corr_MASI_MSI20_20j" not in market.columns:
         market = enrich_market_masi_msi20_rolling_corr(market)
     if not market.empty and "MASI_VaR_Hist_95" not in market.columns:
         market = enrich_market_historic_var(market)
     orderflow = pd.read_parquet(DATA_DIR / "orderflow_indicators.parquet")
-    if not orderflow.empty and "Spoof_Intensity_pct" not in orderflow.columns:
-        orderflow = enrich_orderflow_spoofing(orderflow, DATA_DIR)
     instrument = pd.read_parquet(DATA_DIR / "instrument_indicators.parquet")
     if not market.empty:
         market = enrich_market_stress_score(

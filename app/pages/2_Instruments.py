@@ -23,9 +23,14 @@ st.markdown("""
 </style>""", unsafe_allow_html=True)
 
 st.title("🔍 Analyse par Instrument")
-st.caption("Profil complet d'un titre : cours, volatilité, liquidité, flux d'ordres")
+st.caption(
+    "Profil complet d'un titre : cours, volatilité, liquidité, flux d'ordres. "
+    "Si le fichier orderflow ne contient pas encore les indicateurs **spoofing**, "
+    "le **premier** chargement de cette page peut être long (recalcul depuis l'intraday) ; "
+    "régénérez les Parquets avec le notebook `02_indicateurs` pour éviter ce passage."
+)
 
-from app.utils.data_cache import load_base_data
+from app.utils.data_cache import load_base_data, get_orderflow_for_ui, orderflow_files_fingerprint
 from app.utils.charts import (
     chart_instrument_profile,
     chart_scatter_risk,
@@ -36,7 +41,8 @@ from app.utils.streamlit_nav import get_query_param
 
 data      = load_base_data()
 df_instr  = data['instrument'].copy()
-df_of     = data['orderflow'].copy()
+# Spoofing recalculé ici si absent du Parquet (évite de bloquer load_base_data au démarrage).
+df_of     = get_orderflow_for_ui(orderflow_files_fingerprint()).copy()
 df_anom   = data['anomalies'].copy()
 
 for df in [df_instr, df_of, df_anom]:

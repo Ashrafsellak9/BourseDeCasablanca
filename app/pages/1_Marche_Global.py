@@ -49,7 +49,6 @@ from app.utils.charts import (
     BVC_GOLD,
 )
 from src.market_stress import stress_summary_latest, market_quality_trend_5d
-from src.macro_events import load_macro_events, filter_macro_events_for_period
 from src.indicators import MASI_VAR_HIST_WINDOW, MASI_VAR_HIST_MIN_PERIODS
 from app.utils.streamlit_nav import get_query_param
 
@@ -74,9 +73,6 @@ df_market['Jour'] = pd.to_datetime(df_market['Jour'])
 df_instr   = data['instrument'].copy()
 df_instr['Jour'] = pd.to_datetime(df_instr['Jour'])
 
-_DATA_ROOT = Path(__file__).resolve().parent.parent.parent / "data"
-_macro_master = load_macro_events(_DATA_ROOT)
-
 # ── Filtres sidebar ───────────────────────────────────────────────────────
 date_min = df_market['Jour'].min().date()
 date_max = df_market['Jour'].max().date()
@@ -99,44 +95,11 @@ with st.sidebar:
         max_value=date_max,
     )
     indice_sel = st.selectbox("Indice", ["MASI", "MSI20", "Les deux"])
-    st.markdown("**Jalons macro**")
-    hide_macro_lines = st.checkbox(
-        "Masquer les jalons macro sur les graphiques",
-        value=False,
-        key="marche_hide_macro_lines",
-    )
-    hide_macro_labels_only = st.checkbox(
-        "Masquer uniquement les libellés (garder les lignes en pointillés)",
-        value=False,
-        key="marche_hide_macro_labels",
-        disabled=hide_macro_lines,
-        help="Utile quand le graphique est chargé : les dates restent visibles via les lignes.",
-    )
-    _mp_side = filter_macro_events_for_period(_macro_master, d_start, d_end)
-    with st.expander(f"📅 Calendrier macro — période ({len(_mp_side)} évén.)"):
-        st.caption(
-            "Fichier éditable : `data/ref/macro_events.csv` — colonnes **Jour**, **Titre**, **Type** "
-            "(ex. *Politique monétaire*, *Publication macro*), **Source** optionnelle. "
-            "Utilisez les cases **Masquer…** ci-dessus pour retirer lignes ou libellés des graphiques."
-        )
-        if _mp_side.empty:
-            st.info("Aucun événement dans l’intervalle sélectionné.")
-        else:
-            _cols = [c for c in ("Jour", "Titre", "Type", "Source") if c in _mp_side.columns]
-            st.dataframe(_mp_side[_cols], hide_index=True, use_container_width=True)
 
 df_f = df_market[
     (df_market['Jour'].dt.date >= d_start) &
     (df_market['Jour'].dt.date <= d_end)
 ].copy()
-
-_macro_period = filter_macro_events_for_period(_macro_master, d_start, d_end)
-macro_ctx = (
-    None
-    if (hide_macro_lines or _macro_period.empty)
-    else _macro_period
-)
-macro_event_labels = (not hide_macro_labels_only) if macro_ctx is not None else True
 
 # ── KPIs ─────────────────────────────────────────────────────────────────
 st.subheader("Indicateurs Clés")
@@ -225,7 +188,7 @@ with tab1:
     col_l, col_r = st.columns([3, 1])
     with col_l:
         st.plotly_chart(
-            chart_masi(df_f, macro_ctx, macro_event_labels=macro_event_labels),
+            chart_masi(df_f),
             use_container_width=True,
             key="chart_masi_tab1",
         )
@@ -257,7 +220,7 @@ with tab1:
             "si la distribution passée se reproduit."
         )
         st.plotly_chart(
-            chart_masi_historic_var(df_f, macro_ctx, macro_event_labels=macro_event_labels),
+            chart_masi_historic_var(df_f),
             use_container_width=True,
             key="chart_masi_var_tab1",
         )
@@ -278,12 +241,7 @@ with tab1:
             key="corr_masi_msi20_window",
         )
         st.plotly_chart(
-            chart_masi_msi20_rolling_correlation(
-                df_f,
-                window=_cw,
-                df_macro_events=macro_ctx,
-                macro_event_labels=macro_event_labels,
-            ),
+            chart_masi_msi20_rolling_correlation(df_f, window=_cw),
             use_container_width=True,
             key="chart_masi_msi20_corr_tab1",
         )
@@ -292,7 +250,7 @@ with tab1:
 
 with tab2:
     st.plotly_chart(
-        chart_volume_marche(df_f, macro_ctx, macro_event_labels=macro_event_labels),
+        chart_volume_marche(df_f),
         use_container_width=True,
         key="chart_vol_marche_tab2",
     )
@@ -467,7 +425,7 @@ with tab3:
         "haussière vs baissière, en complément du **breadth** (part en %)."
     )
     st.plotly_chart(
-        chart_advance_decline_line(df_f, macro_ctx, macro_event_labels=macro_event_labels),
+        chart_advance_decline_line(df_f),
         use_container_width=True,
         key="chart_ad_line_tab3",
     )
@@ -527,7 +485,7 @@ with tab4:
                 )
         with c_ch:
             st.plotly_chart(
-                chart_market_stress(df_f, macro_ctx, macro_event_labels=macro_event_labels),
+                chart_market_stress(df_f),
                 use_container_width=True,
                 key="chart_market_stress_tab4",
             )

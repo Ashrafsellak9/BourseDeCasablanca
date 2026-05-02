@@ -76,7 +76,6 @@ from app.utils.charts import (
     SEV_COLORS,
 )
 from src.market_stress import stress_summary_latest, market_quality_trend_5d
-from src.macro_events import load_macro_events, filter_macro_events_for_period
 
 try:
     data = load_base_data()
@@ -90,29 +89,6 @@ except Exception as e:
 
 if DATA_OK:
     from src.anomaly_detector import summarize_anomalies
-
-    _app_data_root = Path(__file__).resolve().parent.parent / "data"
-    _macro_home_master = load_macro_events(_app_data_root)
-    _macro_home = filter_macro_events_for_period(
-        _macro_home_master,
-        df_market["Jour"].min().date(),
-        df_market["Jour"].max().date(),
-    )
-    with st.sidebar:
-        st.markdown("### Affichage — jalons macro")
-        _home_hide_macro = st.checkbox(
-            "Masquer les jalons macro (page d’accueil)",
-            value=False,
-            key="home_hide_macro_lines",
-        )
-        _home_hide_labels = st.checkbox(
-            "Masquer uniquement les libellés",
-            value=False,
-            key="home_hide_macro_labels",
-            disabled=_home_hide_macro,
-        )
-    _macro_ctx_home = None if _home_hide_macro or _macro_home.empty else _macro_home
-    _macro_lbl_home = (not _home_hide_labels) if _macro_ctx_home is not None else True
 
     # ── KPIs ──────────────────────────────────────────────────────────────
     st.subheader("Vue d'ensemble — BVC 2025")
@@ -169,11 +145,7 @@ if DATA_OK:
             oir_m = summ.get("OIR_Marche_MeanAbs")
             st.caption(f"|OIR| moyen marché (séance) : {_fmt_m(oir_m)}")
         st.plotly_chart(
-            chart_market_stress(
-                df_market,
-                _macro_ctx_home,
-                macro_event_labels=_macro_lbl_home,
-            ),
+            chart_market_stress(df_market),
             use_container_width=True,
         )
 
@@ -232,16 +204,12 @@ if DATA_OK:
     col_l, col_r = st.columns([2, 1])
     with col_l:
         st.plotly_chart(
-            chart_masi(df_market, _macro_ctx_home, macro_event_labels=_macro_lbl_home),
+            chart_masi(df_market),
             use_container_width=True,
         )
     with col_r:
         st.plotly_chart(
-            chart_volume_marche(
-                df_market,
-                _macro_ctx_home,
-                macro_event_labels=_macro_lbl_home,
-            ),
+            chart_volume_marche(df_market),
             use_container_width=True,
         )
 
