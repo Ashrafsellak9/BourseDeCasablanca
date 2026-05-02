@@ -25,6 +25,7 @@ from src.indicators import (
     compute_instrument_indicators,
     compute_orderflow_indicators,
     compute_alert_scores,
+    compute_advance_decline_line,
     daily_top5_volume_concentration,
 )
 from src.anomaly_detector import (
@@ -72,6 +73,14 @@ def load_base_data():
             on="Jour",
             how="left",
         )
+    if (
+        not market.empty
+        and not instrument.empty
+        and "Rendement_pct" in instrument.columns
+        and "AD_Line" not in market.columns
+    ):
+        _ad = compute_advance_decline_line(instrument[["Jour", "Rendement_pct"]])
+        market = market.merge(_ad, on="Jour", how="left")
     return {
         "market":     market,
         "instrument": instrument,

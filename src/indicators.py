@@ -23,6 +23,31 @@ from src.instrument_segment import (
 warnings.filterwarnings('ignore')
 
 
+def compute_advance_decline_line(df_cours: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calcule la ligne Advance-Decline cumulée par séance.
+
+    Pour chaque jour : ``Advances`` = titres avec rendement **> 0**,
+    ``Declines`` = titres avec rendement **< 0** (les flats ne comptent ni en hausse ni en baisse).
+    ``AD_Net = Advances - Declines``, ``AD_Line`` = somme cumulée (tendance long terme de la participation).
+    """
+    if df_cours.empty or "Rendement_pct" not in df_cours.columns or "Jour" not in df_cours.columns:
+        return pd.DataFrame(columns=["Jour", "Advances", "Declines", "AD_Net", "AD_Line"])
+
+    g = df_cours.dropna(subset=["Jour", "Rendement_pct"]).copy()
+    g["Jour"] = pd.to_datetime(g["Jour"])
+    g["_adv"] = (g["Rendement_pct"] > 0).astype(np.int32)
+    g["_dec"] = (g["Rendement_pct"] < 0).astype(np.int32)
+    daily = (
+        g.groupby("Jour", observed=True)
+        .agg(Advances=("_adv", "sum"), Declines=("_dec", "sum"))
+        .reset_index()
+    )
+    daily["AD_Net"] = daily["Advances"] - daily["Declines"]
+    daily["AD_Line"] = daily["AD_Net"].cumsum()
+    return daily.sort_values("Jour").reset_index(drop=True)
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. INDICATEURS MARCHÉ GLOBAL
 # ═══════════════════════════════════════════════════════════════════════════
@@ -86,6 +111,10 @@ def compute_market_indicators(
                    .reset_index(name='Breadth_pct'))
         df = df.merge(breadth, on='Jour', how='left')
 
+    # --- Advance-Decline Line (cumul hausses − baisses par séance) ---
+    if 'Rendement_pct' in df_cours.columns and not df_cours.empty:
+        df = df.merge(compute_advance_decline_line(df_cours), on='Jour', how='left')
+
     # --- Concentration de marché : HHI des volumes par instrument ---
     if 'Volume_MAD' in df_cours.columns:
         hhi = (df_cours.groupby('Jour')
@@ -105,6 +134,8 @@ def compute_market_indicators(
     _zcols = ['Volume_MAD', 'MASI_Return_pct', 'MASI_Vol_20j', 'Volume_Relatif_Marche']
     if 'Volume_Top5_Pct' in df.columns:
         _zcols.append('Volume_Top5_Pct')
+    if 'AD_Line' in df.columns:
+        _zcols.append('AD_Line')
     for col in _zcols:
         if col in df.columns:
             df[f'Z_{col}'] = _zscore_series(df[col])

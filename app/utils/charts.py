@@ -256,6 +256,271 @@ def chart_volume_with_forecast(res: VolumeForecastResult) -> go.Figure:
     return fig
 
 
+def chart_breadth_hhi_regimes(df_market: pd.DataFrame) -> go.Figure:
+    """
+    Nuage de points Breadth (%) × HHI (concentration des volumes), avec quadrants
+    aux médianes de la période : régimes *Large/Étroit* × *Concentré/Diffus*.
+    """
+    need = {"Breadth_pct", "HHI_Volume"}
+    if not need.issubset(set(df_market.columns)):
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Breadth et/ou HHI_Volume manquants pour ce graphique.",
+            xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False, font=dict(size=14),
+        )
+        fig.update_layout(height=400, plot_bgcolor="white")
+        return fig
+
+    dm = (
+        df_market[["Jour", "Breadth_pct", "HHI_Volume"]]
+        .dropna(subset=["Breadth_pct", "HHI_Volume"])
+        .copy()
+    )
+    dm["Jour"] = pd.to_datetime(dm["Jour"])
+    dm = dm.sort_values("Jour")
+    if len(dm) < 3:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Pas assez de points pour croiser Breadth et HHI.",
+            xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False, font=dict(size=14),
+        )
+        fig.update_layout(height=400, plot_bgcolor="white")
+        return fig
+
+    b_med = float(dm["Breadth_pct"].median())
+    h_med = float(dm["HHI_Volume"].median())
+    x = dm["Breadth_pct"].astype(float)
+    y = dm["HHI_Volume"].astype(float)
+    days = dm["Jour"].dt.strftime("%Y-%m-%d")
+
+    fig = go.Figure()
+    # Trajectoire chronologique (ligne discrète)
+    fig.add_trace(go.Scatter(
+        x=x,
+        y=y,
+        mode="lines",
+        line=dict(color="rgba(0,48,135,0.25)", width=1),
+        showlegend=False,
+        hoverinfo="skip",
+    ))
+    cidx = np.arange(len(dm), dtype=float)
+    fig.add_trace(go.Scatter(
+        x=x,
+        y=y,
+        mode="markers",
+        name="Séances",
+        marker=dict(
+            size=9,
+            color=cidx,
+            colorscale=[[0, "#B0BEC5"], [1, BVC_BLUE]],
+            showscale=True,
+            colorbar=dict(
+                title="Temps<br>0→récent",
+                thickness=12,
+                tickvals=[0, len(dm) - 1] if len(dm) > 1 else [0],
+                ticktext=["Ancien", "Récent"] if len(dm) > 1 else ["Récent"],
+            ),
+        ),
+        text=days,
+        hovertemplate=(
+            "<b>%{text}</b><br>Breadth : %{x:.1f}%<br>HHI : %{y:.4f}<extra></extra>"
+        ),
+    ))
+
+    # Dernière séance
+    last = dm.iloc[-1]
+    fig.add_trace(go.Scatter(
+        x=[float(last["Breadth_pct"])],
+        y=[float(last["HHI_Volume"])],
+        mode="markers",
+        name="Dernière séance",
+        marker=dict(size=16, color=BVC_GOLD, symbol="star", line=dict(color="#333", width=1)),
+        hovertemplate=(
+            f"<b>Dernière séance</b> ({last['Jour'].strftime('%Y-%m-%d')})<br>"
+            "Breadth : %{x:.1f}%<br>HHI : %{y:.4f}<extra></extra>"
+        ),
+    ))
+
+    fig.add_shape(
+        type="line",
+        x0=b_med,
+        x1=b_med,
+        y0=float(y.min()),
+        y1=float(y.max()),
+        line=dict(color="#757575", width=1, dash="dash"),
+    )
+    fig.add_shape(
+        type="line",
+        x0=float(x.min()),
+        x1=float(x.max()),
+        y0=h_med,
+        y1=h_med,
+        line=dict(color="#757575", width=1, dash="dash"),
+    )
+
+    x_pad = (float(x.max()) - float(x.min())) * 0.06 + 1e-6
+    y_pad = (float(y.max()) - float(y.min())) * 0.08 + 1e-9
+    x_min, x_max = float(x.min()) - x_pad, float(x.max()) + x_pad
+    y_min, y_max = float(y.min()) - y_pad, float(y.max()) + y_pad
+    bx = (b_med + x_max) / 2
+    tx = (x_min + b_med) / 2
+    by_hi = (h_med + y_max) / 2
+    by_lo = (y_min + h_med) / 2
+
+    ann_kw = dict(
+        showarrow=False,
+        font=dict(size=11, color="#37474F"),
+        xref="x",
+        yref="y",
+    )
+    fig.add_annotation(x=bx, y=by_hi, text="<b>Large + concentré</b><br>(breadth↑, HHI↑)", **ann_kw)
+    fig.add_annotation(x=bx, y=by_lo, text="<b>Large + diffus</b><br>(breadth↑, HHI↓)", **ann_kw)
+    fig.add_annotation(x=tx, y=by_hi, text="<b>Étroit + concentré</b><br>(breadth↓, HHI↑)", **ann_kw)
+    fig.add_annotation(x=tx, y=by_lo, text="<b>Étroit + diffus</b><br>(breadth↓, HHI↓)", **ann_kw)
+
+    fig.add_annotation(
+        x=0.02,
+        y=0.98,
+        xref="paper",
+        yref="paper",
+        xanchor="left",
+        yanchor="top",
+        showarrow=False,
+        align="left",
+        font=dict(size=10, color="#555"),
+        text=(
+            f"Quadrants : médianes période — Breadth = {b_med:.1f} %, HHI = {h_med:.4f}.<br>"
+            "<i>Large</i> = au-dessus de la médiane du breadth (participation haussière large). "
+            "<i>Concentré</i> = HHI au-dessus de la médiane (volumes plus concentrés)."
+        ),
+    )
+
+    fig.update_layout(
+        title="Régimes de marché : Breadth (%) vs HHI concentration des volumes",
+        xaxis_title="Breadth — % de titres en hausse",
+        yaxis_title="HHI (Herfindahl sur parts de volume)",
+        height=460,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        legend=dict(orientation="h", y=1.02),
+        margin=dict(l=20, r=20, t=50, b=20),
+        xaxis=dict(range=[max(0, x_min), min(100, x_max)]),
+        yaxis=dict(range=[max(0, y_min), y_max]),
+    )
+    return fig
+
+
+def chart_advance_decline_line(df_market: pd.DataFrame) -> go.Figure:
+    """
+    Ligne Advance-Decline cumulée (participation long terme) et net journalier (hausse − baisse).
+    """
+    if "AD_Line" not in df_market.columns:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Advance-Decline indisponible (colonne AD_Line absente ou données Cours insuffisantes).",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            font=dict(size=14),
+        )
+        fig.update_layout(height=360, plot_bgcolor="white")
+        return fig
+
+    dm = df_market.copy()
+    dm["Jour"] = pd.to_datetime(dm["Jour"])
+    dm = dm.dropna(subset=["AD_Line"]).sort_values("Jour")
+    if dm.empty:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Aucune donnée AD_Line sur la période.",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            font=dict(size=14),
+        )
+        fig.update_layout(height=360, plot_bgcolor="white")
+        return fig
+
+    has_net = "AD_Net" in dm.columns and dm["AD_Net"].notna().any()
+    if has_net:
+        fig = make_subplots(
+            rows=2,
+            cols=1,
+            shared_xaxes=True,
+            row_heights=[0.34, 0.66],
+            vertical_spacing=0.08,
+            subplot_titles=(
+                "Net journalier (titres en hausse − titres en baisse)",
+                "Advance-Decline Line (cumul)",
+            ),
+        )
+        colors = np.where(dm["AD_Net"].fillna(0) >= 0, "#2E7D32", "#C62828")
+        fig.add_trace(
+            go.Bar(
+                x=dm["Jour"],
+                y=dm["AD_Net"],
+                name="AD net",
+                marker_color=colors,
+                marker_line_width=0,
+                opacity=0.85,
+            ),
+            row=1,
+            col=1,
+        )
+        fig.add_hline(y=0, line_dash="solid", line_color="gray", line_width=1, row=1, col=1)
+        fig.add_trace(
+            go.Scatter(
+                x=dm["Jour"],
+                y=dm["AD_Line"],
+                mode="lines",
+                name="AD Line",
+                line=dict(color=BVC_BLUE, width=2),
+                fill="tozeroy",
+                fillcolor="rgba(0,48,135,0.08)",
+            ),
+            row=2,
+            col=1,
+        )
+        fig.update_yaxes(title_text="Net", row=1, col=1, zeroline=True)
+        fig.update_yaxes(title_text="Cumul", row=2, col=1)
+        fig.update_xaxes(title_text="Date", row=2, col=1)
+        fig.update_layout(
+            height=440,
+            plot_bgcolor="white",
+            paper_bgcolor="white",
+            showlegend=False,
+            margin=dict(l=50, r=20, t=50, b=20),
+        )
+        return fig
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=dm["Jour"],
+            y=dm["AD_Line"],
+            mode="lines",
+            name="AD Line",
+            line=dict(color=BVC_BLUE, width=2),
+            fill="tozeroy",
+            fillcolor="rgba(0,48,135,0.08)",
+        )
+    )
+    fig.update_layout(
+        title="Advance-Decline Line (cumul) — participation long terme",
+        height=360,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        margin=dict(l=50, r=20, t=50, b=20),
+        yaxis_title="Cumul",
+        xaxis_title="Date",
+    )
+    return fig
+
+
 def market_has_segment_volumes(df: pd.DataFrame) -> bool:
     """True si le DataFrame marché contient les colonnes de volume par segment."""
     return all(c in df.columns for c in SEGMENT_VOLUME_COLUMNS)

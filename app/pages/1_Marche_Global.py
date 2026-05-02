@@ -25,7 +25,7 @@ st.markdown("""
 </style>""", unsafe_allow_html=True)
 
 st.title("📈 Vue Marché Global")
-st.caption("Indicateurs agrégés BVC 2025 — MASI, MASI 20, Volumes, Breadth")
+st.caption("Indicateurs agrégés BVC 2025 — MASI, MASI 20, Volumes, Breadth, Advance-Decline")
 
 from app.utils.data_cache import load_base_data
 from app.utils.charts import (
@@ -35,6 +35,8 @@ from app.utils.charts import (
     chart_volume_with_forecast,
     chart_volume_by_segment_stacked,
     chart_volume_segment_share_pct,
+    chart_breadth_hhi_regimes,
+    chart_advance_decline_line,
     chart_market_stress,
     chart_market_quality_mini,
     gauge_market_stress,
@@ -342,6 +344,53 @@ with tab3:
         else:
             st.info("HHI non disponible.")
 
+    st.markdown("#### Advance-Decline (participation cumulée)")
+    st.caption(
+        "Chaque séance : **net** = nombre de titres en hausse moins nombre en baisse (sans compter les flats). "
+        "La **ligne AD** est la somme cumulée du net : elle reflète la **tendance long terme** de la participation "
+        "haussière vs baissière, en complément du **breadth** (part en %)."
+    )
+    st.plotly_chart(
+        chart_advance_decline_line(df_f),
+        use_container_width=True,
+        key="chart_ad_line_tab3",
+    )
+
+    if "Breadth_pct" in df_f.columns and "HHI_Volume" in df_f.columns:
+        st.markdown(
+            "#### Croisement Breadth × HHI (régimes de marché)"
+        )
+        st.caption(
+            "Chaque point est une **séance** ; la couleur suit le **temps** (ancien → récent). "
+            "Les **lignes pointillées** sont les **médianes** de la période affichée : elles découpent "
+            "quatre régimes — *Large* = breadth au-dessus de la médiane, *Concentré* = HHI au-dessus de la médiane."
+        )
+        st.plotly_chart(
+            chart_breadth_hhi_regimes(df_f),
+            use_container_width=True,
+            key="chart_breadth_hhi_scatter_tab3",
+        )
+        _dm_bh = df_f[["Breadth_pct", "HHI_Volume"]].dropna()
+        if len(_dm_bh) >= 1:
+            _bm = float(_dm_bh["Breadth_pct"].median())
+            _hm = float(_dm_bh["HHI_Volume"].median())
+            _lr = df_f.sort_values("Jour").iloc[-1]
+            _b = float(_lr["Breadth_pct"]) if pd.notna(_lr.get("Breadth_pct")) else None
+            _h = float(_lr["HHI_Volume"]) if pd.notna(_lr.get("HHI_Volume")) else None
+            if _b is not None and _h is not None:
+                if _b >= _bm and _h >= _hm:
+                    _reg = "Large + concentré"
+                elif _b >= _bm and _h < _hm:
+                    _reg = "Large + diffus"
+                elif _b < _bm and _h >= _hm:
+                    _reg = "Étroit + concentré"
+                else:
+                    _reg = "Étroit + diffus"
+                st.caption(
+                    f"**Dernière séance** ({pd.to_datetime(_lr['Jour']).strftime('%Y-%m-%d')}) — "
+                    f"régime : **{_reg}** (breadth {_b:.1f} %, HHI {_h:.4f})."
+                )
+
 with tab4:
     st.markdown(
         "**Market Stress Score** — composite **0–100** (volatilité MASI 20j, inverse du breadth, "
@@ -396,6 +445,7 @@ with tab5:
         'Volume_MAD', 'Volume_Top5_Pct', 'Z_Volume_Top5_Pct', 'Volume_MAD_Actions', 'Volume_MAD_OPCVM', 'Volume_MAD_Obligations', 'Volume_MAD_Autre',
         'Volume_Somme_Segments', 'Volume_Segments_vs_Marche_pct',
         'Volume_Relatif_Marche', 'Breadth_pct', 'HHI_Volume',
+        'Advances', 'Declines', 'AD_Net', 'AD_Line', 'Z_AD_Line',
         'Market_Stress_Score', 'Market_Quality_Score', 'Stress_Vol', 'Stress_Breadth', 'Stress_OIR',
         'OIR_Marche_MeanAbs', 'Market_Stress_Regime',
     ] if c in df_f.columns]
@@ -413,7 +463,16 @@ with tab5:
         df_show['Volume_Top5_Pct'] = df_show['Volume_Top5_Pct'].round(1)
     if 'Z_Volume_Top5_Pct' in df_show.columns:
         df_show['Z_Volume_Top5_Pct'] = df_show['Z_Volume_Top5_Pct'].round(2)
-    _rename = {'Volume_MAD': 'Volume (M MAD)', 'Volume_Top5_Pct': 'Top 5 / vol. jour %', 'Z_Volume_Top5_Pct': 'Z-score Top5 %'}
+    _rename = {
+        'Volume_MAD': 'Volume (M MAD)',
+        'Volume_Top5_Pct': 'Top 5 / vol. jour %',
+        'Z_Volume_Top5_Pct': 'Z-score Top5 %',
+        'Advances': 'Hausse (nb titres)',
+        'Declines': 'Baisse (nb titres)',
+        'AD_Net': 'AD net (jour)',
+        'AD_Line': 'AD Line (cumul)',
+        'Z_AD_Line': 'Z-score AD Line',
+    }
     _seg_labels = {
         'Volume_MAD_Actions': 'Vol. Actions (M MAD)',
         'Volume_MAD_OPCVM': 'Vol. OPCVM (M MAD)',

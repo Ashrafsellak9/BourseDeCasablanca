@@ -45,7 +45,7 @@ CRITIQUE = "Critique"
 # ── Features par niveau ─────────────────────────────────────────────────────
 MARKET_FEATURES = [
     "MASI_Rendement_pct", "MASI_Vol_10j", "Volume_MAD",
-    "Volume_Relatif_Marche", "Breadth_pct", "HHI_Volume",
+    "Volume_Relatif_Marche", "Breadth_pct", "HHI_Volume", "AD_Line",
 ]
 
 INSTRUMENT_FEATURES = [
