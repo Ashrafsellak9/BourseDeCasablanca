@@ -27,6 +27,7 @@ from src.indicators import (
     enrich_market_masi_msi20_rolling_corr,
     enrich_market_historic_var,
     compute_orderflow_indicators,
+    enrich_orderflow_spoofing,
     compute_alert_scores,
     compute_advance_decline_line,
     daily_top5_volume_concentration,
@@ -57,6 +58,8 @@ def load_base_data():
     if not market.empty and "MASI_VaR_Hist_95" not in market.columns:
         market = enrich_market_historic_var(market)
     orderflow = pd.read_parquet(DATA_DIR / "orderflow_indicators.parquet")
+    if not orderflow.empty and "Spoof_Intensity_pct" not in orderflow.columns:
+        orderflow = enrich_orderflow_spoofing(orderflow, DATA_DIR)
     instrument = pd.read_parquet(DATA_DIR / "instrument_indicators.parquet")
     if not market.empty:
         market = enrich_market_stress_score(

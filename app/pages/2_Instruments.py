@@ -279,6 +279,55 @@ with tab2:
                 )
                 st.plotly_chart(fig_vw)
 
+        if "Spoof_Intensity_pct" in df_of_t.columns:
+            st.markdown("#### Motifs type spoofing (proxy)")
+            st.caption(
+                "Heuristique **transactionnelle** : tick volumineux (quantile séance), puis volume **côté opposé** "
+                "dans une courte fenêtre avec **peu de mouvement de prix** — analogue statistique d’un gros ordre "
+                "**neutralisé vite** (sans carnet ni flags d’annulation LOB, ce n’est pas une preuve légale de spoofing)."
+            )
+            _ofs = df_of_t.sort_values("Jour")
+            _last = _ofs.iloc[-1]
+            sm1, sm2, sm3 = st.columns(3)
+            sm1.metric(
+                "Intensité (dernier jour)",
+                f"{float(_last['Spoof_Intensity_pct']):.3f} %"
+                if pd.notna(_last.get("Spoof_Intensity_pct"))
+                else "—",
+            )
+            if "Spoof_Flag_Count" in _ofs.columns:
+                sm2.metric(
+                    "Flags (dernier jour)",
+                    f"{int(_last['Spoof_Flag_Count'])}"
+                    if pd.notna(_last.get("Spoof_Flag_Count"))
+                    else "—",
+                )
+            if "Spoof_Large_Trade_Count" in _ofs.columns:
+                sm3.metric(
+                    "Gros ticks (dernier jour)",
+                    f"{int(_last['Spoof_Large_Trade_Count'])}"
+                    if pd.notna(_last.get("Spoof_Large_Trade_Count"))
+                    else "—",
+                )
+            fig_sp = go.Figure()
+            fig_sp.add_trace(
+                go.Bar(
+                    x=_ofs["Jour"],
+                    y=_ofs["Spoof_Intensity_pct"],
+                    marker_color="#BF360C",
+                    opacity=0.85,
+                    name="Intensité spoof proxy",
+                )
+            )
+            fig_sp.update_layout(
+                title=f"Intensité motifs spoofing (%) — {ticker}",
+                height=280,
+                plot_bgcolor="white",
+                yaxis_title="% des transactions",
+                margin=dict(l=20, r=20, t=40, b=20),
+            )
+            st.plotly_chart(fig_sp, use_container_width=True)
+
 with tab3:
     st.plotly_chart(chart_scatter_risk(df_instr), use_container_width=True)
     st.caption("La taille des bulles = Turnover Ratio | Couleur = Volatilité (rouge = plus volatile)")

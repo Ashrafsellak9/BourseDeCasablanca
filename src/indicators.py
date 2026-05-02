@@ -410,6 +410,161 @@ def _score_liquidite(df: pd.DataFrame) -> pd.Series:
 # 3. INDICATEURS DE FLUX D'ORDRES (INTRADAY)
 # ═══════════════════════════════════════════════════════════════════════════
 
+# Heuristique « spoofing » sur carnet de transactions (pas d’annulations LOB explicites) :
+# transaction **volumineuse** puis **contre-flux** en volume dans une courte fenêtre,
+# avec **faible variation de prix** (mimique d’ordres annulés / couches retirées).
+SPOOF_LARGE_QUANTILE = 0.90
+SPOOF_WINDOW_SEC = 90.0
+SPOOF_REVERSAL_RATIO = 0.42
+SPOOF_MAX_PRICE_MOVE = 0.004
+
+
+def _spoof_group_counts(
+    g: pd.DataFrame,
+    large_q: float = SPOOF_LARGE_QUANTILE,
+    window_sec: float = SPOOF_WINDOW_SEC,
+    rev_ratio: float = SPOOF_REVERSAL_RATIO,
+    max_price_move: float = SPOOF_MAX_PRICE_MOVE,
+) -> tuple[int, int]:
+    """
+    Compte les motifs suspects et les grosses transactions sur une séance (un ticker).
+
+    Retourne (nb_motifs_spoofing_proxy, nb_transactions_volumineuses).
+    """
+    need = {"Heure_dt", "Quantite_Titres", "Cours_Transaction", "Is_Buy"}
+    if not need.issubset(g.columns) or len(g) < 6:
+        return 0, 0
+
+    g = g.dropna(subset=list(need)).sort_values("Heure_dt", kind="mergesort").reset_index(drop=True)
+    qty = g["Quantite_Titres"].astype(float).to_numpy()
+    buy = g["Is_Buy"].to_numpy()
+    price = g["Cours_Transaction"].astype(float).to_numpy()
+    t0 = g["Heure_dt"].iloc[0]
+    tsec = (g["Heure_dt"] - t0).dt.total_seconds().to_numpy(dtype=float)
+
+    uq = np.unique(qty)
+    thr = float(np.quantile(qty, large_q)) if len(uq) > 1 else float(np.max(qty) * 0.5)
+    if not np.isfinite(thr) or thr <= 0:
+        return 0, 0
+
+    large_mask = qty >= thr
+    large_n = int(np.sum(large_mask))
+
+    flags = 0
+    n = len(g)
+    for i in range(n):
+        if not large_mask[i] or qty[i] <= 0:
+            continue
+        bi = buy[i]
+        p0 = price[i]
+        ti = tsec[i]
+        opp = 0.0
+        last_p = p0
+        for j in range(i + 1, n):
+            if tsec[j] - ti > window_sec:
+                break
+            if buy[j] != bi:
+                opp += qty[j]
+            last_p = price[j]
+        if opp >= rev_ratio * qty[i] and abs(last_p - p0) / max(p0, 1e-12) < max_price_move:
+            flags += 1
+
+    return int(flags), large_n
+
+
+def _build_spoof_daily_from_ticks(df: pd.DataFrame) -> pd.DataFrame:
+    """Agrège les compteurs spoofing par (Jour, Ticker) depuis les ticks préparés."""
+    rows = []
+    for (jour, ticker), grp in df.groupby(["Jour", "Ticker"], observed=True):
+        fc, lc = _spoof_group_counts(grp)
+        rows.append(
+            {
+                "Jour": jour,
+                "Ticker": ticker,
+                "Spoof_Flag_Count": fc,
+                "Spoof_Large_Trade_Count": lc,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def enrich_orderflow_spoofing(df_of: pd.DataFrame, data_dir: Path | None = None) -> pd.DataFrame:
+    """
+    Recalcule les colonnes spoofing à partir du Parquet intraday si absentes du flux d’ordres.
+    """
+    if df_of.empty or "Spoof_Intensity_pct" in df_of.columns:
+        return df_of
+    dd = data_dir or _DEFAULT_DATA_DIR
+    intra_p = dd / "intraday_enrichis.parquet"
+    if not intra_p.exists():
+        return df_of
+    try:
+        intra = pd.read_parquet(intra_p)
+    except (OSError, ValueError):
+        return df_of
+    spoof = compute_spoofing_orderflow_features(intra)
+    if spoof.empty:
+        return df_of
+    drop_cols = [c for c in spoof.columns if c not in ("Jour", "Ticker") and c in df_of.columns]
+    if "Z_Spoof_Intensity_pct" in df_of.columns:
+        drop_cols.append("Z_Spoof_Intensity_pct")
+    out = df_of.drop(columns=drop_cols, errors="ignore")
+    out = out.merge(spoof, on=["Jour", "Ticker"], how="left")
+    out["Spoof_Flag_Count"] = out["Spoof_Flag_Count"].fillna(0).astype(np.int64)
+    out["Spoof_Large_Trade_Count"] = out["Spoof_Large_Trade_Count"].fillna(0).astype(np.int64)
+    out["Spoof_Intensity_pct"] = out["Spoof_Intensity_pct"].fillna(0.0)
+    out["Z_Spoof_Intensity_pct"] = _zscore_series(out["Spoof_Intensity_pct"])
+    return out
+
+
+def compute_spoofing_orderflow_features(df_intra: pd.DataFrame) -> pd.DataFrame:
+    """
+    Détection **heuristique** de motifs type **spoofing** sur la bande transactionnelle.
+
+    Sans carnet d’ordres ni flags d’annulation : on repère les **gros ticks** suivis d’un
+    **contre-flux** rapide (volume opposé) avec **prix quasi stable** — proxy statistique
+    d’« ordre massif immédiatement neutralisé ».
+    """
+    if df_intra.empty or "Sens" not in df_intra.columns:
+        return pd.DataFrame(columns=["Jour", "Ticker", "Spoof_Flag_Count", "Spoof_Large_Trade_Count", "Spoof_Intensity_pct"])
+
+    df = df_intra[df_intra["Sens"] == "A"].copy()
+    if "Num_Transaction" in df.columns:
+        df = df.drop_duplicates(subset=["Num_Transaction"])
+    if df.empty:
+        return pd.DataFrame(columns=["Jour", "Ticker", "Spoof_Flag_Count", "Spoof_Large_Trade_Count", "Spoof_Intensity_pct"])
+
+    df = df.sort_values(["Ticker", "Jour", "Heure_Transaction"]).reset_index(drop=True)
+
+    if "Heure_int" not in df.columns:
+        df["Heure_int"] = pd.to_datetime(df["Heure_Transaction"], errors="coerce").dt.hour
+        df["Minute_int"] = pd.to_datetime(df["Heure_Transaction"], errors="coerce").dt.minute
+    df["Heure_dt"] = pd.to_datetime(df["Heure_Transaction"], errors="coerce")
+
+    df["Price_Change"] = df.groupby(["Ticker", "Jour"])["Cours_Transaction"].diff()
+    df["Tick_Direction"] = np.where(
+        df["Price_Change"] > 0,
+        1,
+        np.where(df["Price_Change"] < 0, -1, np.nan),
+    )
+    df["Tick_Direction"] = df.groupby(["Ticker", "Jour"])["Tick_Direction"].ffill().fillna(1)
+    df["Is_Buy"] = df["Tick_Direction"] == 1
+
+    spoof_df = _build_spoof_daily_from_ticks(df)
+    if "Num_Transaction" in df.columns:
+        nb = df.groupby(["Jour", "Ticker"], observed=True)["Num_Transaction"].count().reset_index(name="_nb")
+    else:
+        nb = df.groupby(["Jour", "Ticker"], observed=True).size().reset_index(name="_nb")
+    spoof_df = spoof_df.merge(nb, on=["Jour", "Ticker"], how="left")
+    spoof_df["Spoof_Intensity_pct"] = np.where(
+        spoof_df["_nb"].replace(0, np.nan).notna() & (spoof_df["_nb"] > 0),
+        spoof_df["Spoof_Flag_Count"] / spoof_df["_nb"] * 100.0,
+        0.0,
+    )
+    spoof_df = spoof_df.drop(columns=["_nb"], errors="ignore")
+    return spoof_df
+
+
 def compute_orderflow_indicators(
     df_intra: pd.DataFrame,
     df_cours: pd.DataFrame | None = None,
@@ -453,6 +608,7 @@ def compute_orderflow_indicators(
     df['Is_Buy'] = df['Tick_Direction'] == 1
     df['Buy_Volume'] = df['Quantite_Titres'] * df['Is_Buy']
     df['Sell_Volume'] = df['Quantite_Titres'] * (~df['Is_Buy'])
+    df['Heure_dt'] = pd.to_datetime(df['Heure_Transaction'], errors='coerce')
 
     # === Agrégation par (Jour, Ticker) ===
     agg = df.groupby(['Jour', 'Ticker']).agg(
@@ -474,6 +630,17 @@ def compute_orderflow_indicators(
     # --- Order Arrival Rate (transactions / heure active) ---
     agg['OAR'] = agg['Nb_Transactions'] / agg['Duree_Active_min'].replace(0, np.nan) * 60
 
+    # --- Motifs type spoofing (proxy tick-by-tick) ---
+    spoof_df = _build_spoof_daily_from_ticks(df)
+    agg = agg.merge(spoof_df, on=['Jour', 'Ticker'], how='left')
+    agg['Spoof_Flag_Count'] = agg['Spoof_Flag_Count'].fillna(0).astype(np.int64)
+    agg['Spoof_Large_Trade_Count'] = agg['Spoof_Large_Trade_Count'].fillna(0).astype(np.int64)
+    agg['Spoof_Intensity_pct'] = np.where(
+        agg['Nb_Transactions'] > 0,
+        agg['Spoof_Flag_Count'] / agg['Nb_Transactions'] * 100.0,
+        0.0,
+    )
+
     # --- Volatilité intraday normalisée ---
     agg['Volatilite_Intraday'] = agg['Cours_Std'] / agg['VWAP'].replace(0, np.nan) * 100
 
@@ -490,8 +657,9 @@ def compute_orderflow_indicators(
         agg['VWAP_Dev_pct'] = np.nan
 
     # --- Z-scores pour anomalies ---
-    for col in ['OIR', 'OAR', 'Volatilite_Intraday', 'Nb_Transactions']:
-        agg[f'Z_{col}'] = _zscore_series(agg[col])
+    for col in ['OIR', 'OAR', 'Volatilite_Intraday', 'Nb_Transactions', 'Spoof_Intensity_pct']:
+        if col in agg.columns:
+            agg[f'Z_{col}'] = _zscore_series(agg[col])
 
     return agg.sort_values(['Jour', 'Ticker']).reset_index(drop=True)
 
