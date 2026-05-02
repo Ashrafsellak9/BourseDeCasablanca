@@ -32,6 +32,7 @@ from app.utils.charts import (
     chart_masi,
     chart_volume_marche,
     chart_volume_top5_concentration,
+    chart_volume_with_forecast,
     chart_volume_by_segment_stacked,
     chart_volume_segment_share_pct,
     chart_market_stress,
@@ -43,6 +44,21 @@ from app.utils.charts import (
 )
 from src.market_stress import stress_summary_latest, market_quality_trend_5d
 from app.utils.streamlit_nav import get_query_param
+
+
+@st.cache_data(show_spinner="Prévision du volume…")
+def _volume_forecast_run(
+    dates: tuple[str, ...],
+    volumes: tuple[float, ...],
+    method: str,
+    horizon: int,
+):
+    from src.volume_forecast import fit_volume_forecast
+
+    idx = pd.to_datetime(pd.Series(list(dates)))
+    s = pd.Series(list(volumes), index=idx).sort_index()
+    return fit_volume_forecast(s, method=method, horizon=horizon)
+
 
 data       = load_base_data()
 df_market  = data['market'].copy()
@@ -162,6 +178,38 @@ with tab1:
 
 with tab2:
     st.plotly_chart(chart_volume_marche(df_f), use_container_width=True, key="chart_vol_marche_tab2")
+
+    st.markdown("#### Prévision de volume (contexte)")
+    st.caption(
+        "**ARIMA** (statsmodels) ou **Prophet** (optionnel : `pip install prophet`). "
+        "Prévision en jours ouvrés après la dernière date de la période affichée ; bande = intervalle approximatif (~80 % pour ARIMA)."
+    )
+    fc_col1, fc_col2 = st.columns([1, 1])
+    with fc_col1:
+        fc_horizon = st.slider("Horizon (j. ouvrés)", 3, 21, 7, key="vol_fc_horizon")
+    with fc_col2:
+        fc_model = st.selectbox("Modèle", ["ARIMA", "Prophet"], index=0, key="vol_fc_model")
+    d_ord = df_f.sort_values("Jour").dropna(subset=["Volume_MAD"])
+    if len(d_ord) >= 5:
+        dj = tuple(d_ord["Jour"].dt.strftime("%Y-%m-%d").tolist())
+        vv = tuple(float(v) for v in d_ord["Volume_MAD"].tolist())
+        res_fc = _volume_forecast_run(dj, vv, fc_model.lower(), int(fc_horizon))
+        st.plotly_chart(
+            chart_volume_with_forecast(res_fc),
+            use_container_width=True,
+            key="chart_vol_forecast_tab2",
+        )
+        st.caption(res_fc.message)
+        if res_fc.success and len(res_fc.forecast_mean) and len(res_fc.history_actual):
+            last_a = float(res_fc.history_actual[-1])
+            first_f = float(res_fc.forecast_mean[0])
+            dlt = ((first_f - last_a) / last_a * 100.0) if last_a else 0.0
+            m_a, m_b, m_c = st.columns(3)
+            m_a.metric("Dernière séance (réalisé)", f"{last_a / 1e6:.1f} M MAD")
+            m_b.metric("1er jour prévu (point)", f"{first_f / 1e6:.1f} M MAD", delta=f"{dlt:+.1f} % vs réalisé")
+            m_c.metric("Modèle affiché", res_fc.method)
+    else:
+        st.info("Pas assez de données sur la période pour lancer une prévision.")
 
     st.markdown(
         "**Concentration du volume (top 5)** — chaque jour : somme des volumes des **5 instruments** "

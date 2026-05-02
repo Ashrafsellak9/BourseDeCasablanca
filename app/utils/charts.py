@@ -9,6 +9,7 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 
 from src.instrument_segment import SEGMENT_VOLUME_COLUMNS
+from src.volume_forecast import VolumeForecastResult, SCALE as VOL_FORECAST_SCALE
 
 SEV_COLORS = {
     'Normal':   '#4CAF50',
@@ -152,6 +153,105 @@ def chart_volume_top5_concentration(df_market: pd.DataFrame) -> go.Figure:
         showlegend=False,
         margin=dict(l=20, r=20, t=48, b=20),
         yaxis=dict(range=[0, 100], ticksuffix="%", title="% du volume jour"),
+    )
+    return fig
+
+
+def chart_volume_with_forecast(res: VolumeForecastResult) -> go.Figure:
+    """Historique du volume (M MAD) + ajustement in-sample + prévision et intervalle."""
+    fig = go.Figure()
+    if not res.success or len(res.history_dates) == 0:
+        fig.add_annotation(
+            text=res.message or "Prévision indisponible.",
+            xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False, font=dict(size=14),
+        )
+        fig.update_layout(height=360, plot_bgcolor="white")
+        return fig
+
+    sc = VOL_FORECAST_SCALE
+    x_hist = pd.to_datetime(res.history_dates)
+    y_hist = res.history_actual.astype(float) / sc
+    fig.add_trace(go.Scatter(
+        x=x_hist,
+        y=y_hist,
+        mode="lines+markers",
+        name="Volume réalisé",
+        line=dict(color=BVC_BLUE, width=2),
+        marker=dict(size=4),
+    ))
+
+    if res.history_fitted is not None and len(res.history_fitted) == len(y_hist):
+        fig.add_trace(go.Scatter(
+            x=x_hist,
+            y=res.history_fitted.astype(float) / sc,
+            mode="lines",
+            name="Ajustement modèle",
+            line=dict(color="#78909C", width=1.5, dash="dash"),
+            opacity=0.9,
+        ))
+
+    x_fc = pd.to_datetime(res.forecast_dates)
+    y_fc = res.forecast_mean.astype(float) / sc
+    y_lo = res.forecast_lower.astype(float) / sc
+    y_hi = res.forecast_upper.astype(float) / sc
+
+    fig.add_trace(go.Scatter(
+        x=x_fc,
+        y=y_lo,
+        mode="lines",
+        line=dict(width=0),
+        showlegend=False,
+        hoverinfo="skip",
+    ))
+    fig.add_trace(go.Scatter(
+        x=x_fc,
+        y=y_hi,
+        mode="lines",
+        line=dict(width=0),
+        fillcolor="rgba(200,168,75,0.22)",
+        fill="tonexty",
+        name="Intervalle ~80%",
+        hoverinfo="skip",
+    ))
+    fig.add_trace(go.Scatter(
+        x=x_fc,
+        y=y_fc,
+        mode="lines+markers",
+        name="Prévision",
+        line=dict(color=BVC_GOLD, width=2.5),
+        marker=dict(size=6, symbol="diamond"),
+    ))
+
+    lx = pd.to_datetime(x_hist.max())
+    fig.add_shape(
+        type="line",
+        x0=lx,
+        x1=lx,
+        y0=0,
+        y1=1,
+        yref="paper",
+        xref="x",
+        line=dict(color="#888888", width=1, dash="dot"),
+    )
+    fig.add_annotation(
+        x=lx,
+        y=1.02,
+        yref="paper",
+        text="Fin historique",
+        showarrow=False,
+        font=dict(size=11, color="#666"),
+        xanchor="left",
+    )
+
+    fig.update_layout(
+        title="Volume marché : historique et prévision (M MAD)",
+        height=400,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        legend=dict(orientation="h", y=1.02),
+        margin=dict(l=20, r=20, t=50, b=20),
+        yaxis_title="Volume (M MAD)",
+        hovermode="x unified",
     )
     return fig
 
