@@ -260,7 +260,32 @@ with tab4:
         st.download_button("⬇️ Télécharger Seuils CSV", csv_s, "seuils_statistiques.csv", "text/csv")
 
 with tab5:
-    st.markdown(f"**{len(df_f):,} anomalies** après filtrage")
+    n_total = len(df_f)
+    st.markdown(f"**{n_total:,} anomalies** après filtrage")
+
+    cols_show = [c for c in ['Jour','Ticker','Libelle','Niveau','Indicateur','Description',
+                             'Valeur','Severite_Finale','Score_Consensus','Nb_Methodes_Alerte']
+                 if c in df_f.columns]
+    df_all = df_f[cols_show].reset_index(drop=True)
+
+    # Le style pandas + 10–20k lignes = HTML énorme → navigateur très lent.
+    _max_ui = min(n_total, 10_000)
+    _default_ui = min(750, _max_ui) if n_total else 1
+    n_display = st.number_input(
+        "Lignes affichées dans le tableau (aperçu)",
+        min_value=1,
+        max_value=_max_ui if _max_ui else 1,
+        value=_default_ui if _max_ui else 1,
+        step=1,
+        help="Un extrait seulement pour un rendu fluide. "
+        "Exports CSV / Excel = **toutes** les lignes filtrées.",
+        disabled=n_total == 0,
+    )
+    if n_total:
+        st.caption(
+            f"Aperçu : **{min(n_display, n_total):,}** / **{n_total:,}** lignes — "
+            "couleurs de sévérité uniquement si l’aperçu ≤ 1 000 lignes."
+        )
 
     def color_sev(val):
         m = {'Critique':'background-color:#FFEBEE;color:#C62828;font-weight:700',
@@ -269,27 +294,31 @@ with tab5:
              'Normal':'color:#388E3C'}
         return m.get(val,'')
 
-    cols_show = [c for c in ['Jour','Ticker','Libelle','Niveau','Indicateur','Description',
-                               'Valeur','Severite_Finale','Score_Consensus','Nb_Methodes_Alerte']
-                 if c in df_f.columns]
-    df_show = df_f[cols_show].reset_index(drop=True)
-
-    st.dataframe(
-        df_show.style.map(color_sev, subset=['Severite_Finale']),
-        use_container_width=True, height=500,
-    )
+    if n_total == 0:
+        st.info("Aucune anomalie pour les filtres choisis.")
+    else:
+        df_table = df_all.head(n_display)
+        if len(df_table) <= 1000 and 'Severite_Finale' in df_table.columns:
+            st.dataframe(
+                df_table.style.map(color_sev, subset=['Severite_Finale']),
+                use_container_width=True,
+                height=520,
+                hide_index=True,
+            )
+        else:
+            st.dataframe(df_table, use_container_width=True, height=520, hide_index=True)
 
     col1, col2 = st.columns([1, 3])
     with col1:
-        csv = df_show.to_csv(index=False).encode('utf-8')
-        st.download_button("⬇️ Exporter CSV", csv, "anomalies_filtrees.csv", "text/csv")
+        csv = df_all.to_csv(index=False).encode('utf-8')
+        st.download_button("⬇️ Exporter CSV (tout le filtre)", csv, "anomalies_filtrees.csv", "text/csv")
 
     with col2:
         import io
         output = io.BytesIO()
-        df_show.to_excel(output, index=False, engine='openpyxl')
+        df_all.to_excel(output, index=False, engine='openpyxl')
         st.download_button(
-            "⬇️ Exporter Excel",
+            "⬇️ Exporter Excel (tout le filtre)",
             data=output.getvalue(),
             file_name="anomalies_filtrees.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
