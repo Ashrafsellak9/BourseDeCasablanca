@@ -56,7 +56,6 @@ INSTRUMENT_FEATURES = [
 
 ORDERFLOW_FEATURES = [
     "OIR", "OAR", "Intraday_Vol", "VWAP_Deviation_pct",
-    "Spoof_Intensity_pct",
 ]
 
 

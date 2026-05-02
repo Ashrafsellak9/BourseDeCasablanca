@@ -37,8 +37,6 @@ classDiagram
         +compute_market_indicators()
         +compute_instrument_indicators()
         +compute_orderflow_indicators()
-        +compute_spoofing_orderflow_features()
-        +enrich_orderflow_spoofing()
         +compute_alert_scores()
         +enrich_market_masi_msi20_rolling_corr()
         +enrich_market_historic_var()
@@ -72,11 +70,6 @@ classDiagram
         +enrich_market_with_segment_volumes()
     }
 
-    class MacroEvents {
-        +load_macro_events()
-        +filter_macro_events_for_period()
-    }
-
     class VolumeForecast {
         +fit_volume_forecast()
     }
@@ -103,7 +96,6 @@ classDiagram
     DataCache --> InstrumentSegment
     Indicators --> DataStore
     AnomalyDetector --> DataStore
-    StreamlitApp --> MacroEvents
     StreamlitApp --> VolumeForecast
     StreamlitApp --> MLModels
     CriticalAlertNotifier --> Notifications
@@ -128,10 +120,9 @@ flowchart TB
     subgraph SYST["Systeme Surveillance BVC"]
         UC1["UC1: Vue ensemble marche"]
         UC2["UC2: Stress marche et qualite"]
-        UC3["UC3: Graphiques MASI volume macro"]
+        UC3["UC3: Graphiques MASI volume"]
         UC4["UC4: Profil instrument liquidite"]
         UC5["UC5: Flux ordres OIR OAR VWAP"]
-        UC6["UC6: Proxy motifs spoofing"]
         UC7["UC7: Anomalies statistiques"]
         UC8["UC8: Scores alerte"]
         UC9["UC9: Notifications critiques"]
@@ -166,8 +157,8 @@ flowchart TB
 
 | UC   | Description courte                         | Pages / modules principaux      |
 |------|---------------------------------------------|-----------------------------------|
-| UC1–3 | Tableau de bord, stress, MASI, macro       | `app.py`, `1_Marche_Global.py`, `charts.py`, `market_stress.py`, `macro_events.py` |
-| UC4–6 | Instrument, orderflow, spoofing            | `2_Instruments.py`, `indicators.py` |
+| UC1–3 | Tableau de bord, stress, MASI, volumes     | `app.py`, `1_Marche_Global.py`, `charts.py`, `market_stress.py` |
+| UC4–5 | Instrument, flux d’ordres                  | `2_Instruments.py`, `indicators.py` |
 | UC7–9 | Anomalies, alertes, notifications          | `3_Alertes.py`, `anomaly_detector.py`, `critical_alert_notifier.py`, `notifications.py` |
 | UC10 | ML                                         | `5_Machine_Learning.py`, `ml_models.py`, notebooks `04_*` |
 | UC11 | Upload                                     | `4_Upload_Excel.py`, `data_cache.process_uploaded_file` |
@@ -241,8 +232,6 @@ flowchart TB
     ANO --> PQ
     P5 --> PQ
     P1 --> VF
-    P1 --> MACRO
-    APP --> MACRO
     P3 --> CRIT
     CRIT --> NOTIF
 ```
@@ -297,9 +286,8 @@ gantt
     Anomalies statistiques phase 3 n03        :d1, after c3, 14d
     Scores alertes et consolidation            :d2, after d1, 7d
 
-    section ML et motifs avancés
+    section ML
     Entraînement ML notebook 04                :e1, after d2, 14d
-    Heuristique spoofing proxy orderflow     :e2, after e1, 7d
 
     section Application
     UI Streamlit pages et graphiques           :f1, after c1, 35d

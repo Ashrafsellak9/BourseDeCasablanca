@@ -23,14 +23,9 @@ st.markdown("""
 </style>""", unsafe_allow_html=True)
 
 st.title("🔍 Analyse par Instrument")
-st.caption(
-    "Profil complet d'un titre : cours, volatilité, liquidité, flux d'ordres. "
-    "Si le fichier orderflow ne contient pas encore les indicateurs **spoofing**, "
-    "le **premier** chargement de cette page peut être long (recalcul depuis l'intraday) ; "
-    "régénérez les Parquets avec le notebook `02_indicateurs` pour éviter ce passage."
-)
+st.caption("Profil complet d'un titre : cours, volatilité, liquidité, flux d'ordres")
 
-from app.utils.data_cache import load_base_data, get_orderflow_for_ui, orderflow_files_fingerprint
+from app.utils.data_cache import load_base_data
 from app.utils.charts import (
     chart_instrument_profile,
     chart_scatter_risk,
@@ -41,8 +36,7 @@ from app.utils.streamlit_nav import get_query_param
 
 data      = load_base_data()
 df_instr  = data['instrument'].copy()
-# Spoofing recalculé ici si absent du Parquet (évite de bloquer load_base_data au démarrage).
-df_of     = get_orderflow_for_ui(orderflow_files_fingerprint()).copy()
+df_of     = data['orderflow'].copy()
 df_anom   = data['anomalies'].copy()
 
 for df in [df_instr, df_of, df_anom]:
@@ -284,55 +278,6 @@ with tab2:
                     margin=dict(l=20,r=20,t=40,b=20),
                 )
                 st.plotly_chart(fig_vw)
-
-        if "Spoof_Intensity_pct" in df_of_t.columns:
-            st.markdown("#### Motifs type spoofing (proxy)")
-            st.caption(
-                "Heuristique **transactionnelle** : tick volumineux (quantile séance), puis volume **côté opposé** "
-                "dans une courte fenêtre avec **peu de mouvement de prix** — analogue statistique d’un gros ordre "
-                "**neutralisé vite** (sans carnet ni flags d’annulation LOB, ce n’est pas une preuve légale de spoofing)."
-            )
-            _ofs = df_of_t.sort_values("Jour")
-            _last = _ofs.iloc[-1]
-            sm1, sm2, sm3 = st.columns(3)
-            sm1.metric(
-                "Intensité (dernier jour)",
-                f"{float(_last['Spoof_Intensity_pct']):.3f} %"
-                if pd.notna(_last.get("Spoof_Intensity_pct"))
-                else "—",
-            )
-            if "Spoof_Flag_Count" in _ofs.columns:
-                sm2.metric(
-                    "Flags (dernier jour)",
-                    f"{int(_last['Spoof_Flag_Count'])}"
-                    if pd.notna(_last.get("Spoof_Flag_Count"))
-                    else "—",
-                )
-            if "Spoof_Large_Trade_Count" in _ofs.columns:
-                sm3.metric(
-                    "Gros ticks (dernier jour)",
-                    f"{int(_last['Spoof_Large_Trade_Count'])}"
-                    if pd.notna(_last.get("Spoof_Large_Trade_Count"))
-                    else "—",
-                )
-            fig_sp = go.Figure()
-            fig_sp.add_trace(
-                go.Bar(
-                    x=_ofs["Jour"],
-                    y=_ofs["Spoof_Intensity_pct"],
-                    marker_color="#BF360C",
-                    opacity=0.85,
-                    name="Intensité spoof proxy",
-                )
-            )
-            fig_sp.update_layout(
-                title=f"Intensité motifs spoofing (%) — {ticker}",
-                height=280,
-                plot_bgcolor="white",
-                yaxis_title="% des transactions",
-                margin=dict(l=20, r=20, t=40, b=20),
-            )
-            st.plotly_chart(fig_sp, use_container_width=True)
 
 with tab3:
     st.plotly_chart(chart_scatter_risk(df_instr), use_container_width=True)

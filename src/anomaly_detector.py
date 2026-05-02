@@ -376,7 +376,6 @@ def detect_orderflow_anomalies(df_of: pd.DataFrame) -> pd.DataFrame:
         'Volatilite_Intraday':  {'methods': ['zscore','percentile','iqr'], 'window': 10, 'desc': 'Volatilité intraday élevée'},
         'VWAP_Dev_pct':         {'methods': ['zscore','percentile','iqr'], 'window': 10, 'desc': 'Déviation VWAP vs clôture'},
         'Nb_Transactions':      {'methods': ['zscore','percentile','bollinger'], 'window': 10, 'desc': 'Nb transactions anormal'},
-        'Spoof_Intensity_pct':  {'methods': ['zscore','percentile','iqr'], 'window': 10, 'desc': 'Intensité motifs spoofing (proxy bande transactions)'},
     }
 
     records = []
@@ -512,7 +511,6 @@ def compute_seuils_table(
             ('OAR', 'OAR (transactions/h)'),
             ('Volatilite_Intraday', 'Volatilité Intraday (%)'),
             ('VWAP_Dev_pct', 'VWAP Déviation (%)'),
-            ('Spoof_Intensity_pct', 'Intensité spoofing proxy (%)'),
         ]:
             if col in df_of.columns:
                 _add(df_of[col], nom, 'Flux d\'Ordres')
