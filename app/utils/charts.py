@@ -285,3 +285,106 @@ def chart_scatter_risk(df_instr: pd.DataFrame) -> go.Figure:
     )
     return fig
 
+
+def chart_market_stress(df_market: pd.DataFrame) -> go.Figure:
+    """
+    Score de stress marché composite + décomposition (volatilité, breadth, OIR).
+    Mis à jour à chaque rechargement des données (dernière séance = bord droit du graphique).
+    """
+    req = ["Jour", "Market_Stress_Score", "Stress_Vol", "Stress_Breadth", "Stress_OIR"]
+    if not all(c in df_market.columns for c in req):
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Colonnes Market Stress absentes — rechargez les données.",
+            xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False,
+        )
+        fig.update_layout(height=360, title="Market Stress Score")
+        return fig
+
+    d = df_market.sort_values("Jour").copy()
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        row_heights=[0.42, 0.58],
+        subplot_titles=[
+            "Market Stress Score — composite (0–100)",
+            "Composantes (même échelle)",
+        ],
+        vertical_spacing=0.1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=d["Jour"],
+            y=d["Market_Stress_Score"],
+            name="Stress global",
+            line=dict(color="#B71C1C", width=2.5),
+            fill="tozeroy",
+            fillcolor="rgba(183,28,28,0.08)",
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_hline(y=50, line_dash="dash", line_color="orange", opacity=0.7, row=1, col=1)
+    fig.add_hline(y=75, line_dash="dot", line_color="red", opacity=0.6, row=1, col=1)
+
+    fig.add_trace(
+        go.Scatter(x=d["Jour"], y=d["Stress_Vol"], name="Stress vol. MASI", line=dict(color="#1565C0")),
+        row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(x=d["Jour"], y=d["Stress_Breadth"], name="Stress breadth", line=dict(color="#6A1B9A")),
+        row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(x=d["Jour"], y=d["Stress_OIR"], name="Stress OIR (|OIR| moy.)", line=dict(color="#2E7D32")),
+        row=2,
+        col=1,
+    )
+    fig.update_layout(
+        height=520,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        margin=dict(l=20, r=20, t=56, b=20),
+    )
+    fig.update_yaxes(range=[0, 105], row=1, col=1)
+    fig.update_yaxes(range=[0, 105], row=2, col=1)
+    return fig
+
+
+def gauge_market_stress(score: float, regime: str) -> go.Figure:
+    """Jauge du stress (dernière séance)."""
+    val = float(score) if score is not None and not (isinstance(score, float) and np.isnan(score)) else 0.0
+    val = max(0.0, min(100.0, val))
+    fig = go.Figure(
+        go.Indicator(
+            mode="gauge+number",
+            value=val,
+            number={"suffix": "/100", "font": {"size": 36}},
+            title={"text": f"Régime : {regime}", "font": {"size": 14}},
+            gauge={
+                "axis": {"range": [0, 100], "tickwidth": 1},
+                "bar": {"color": "#002366"},
+                "bgcolor": "white",
+                "borderwidth": 1,
+                "bordercolor": "#ccc",
+                "steps": [
+                    {"range": [0, 25], "color": "#E8F5E9"},
+                    {"range": [25, 50], "color": "#FFF9C4"},
+                    {"range": [50, 75], "color": "#FFE0B2"},
+                    {"range": [75, 100], "color": "#FFCDD2"},
+                ],
+                "threshold": {
+                    "line": {"color": "red", "width": 3},
+                    "thickness": 0.8,
+                    "value": 85,
+                },
+            },
+        )
+    )
+    fig.update_layout(height=280, margin=dict(l=24, r=24, t=40, b=16))
+    return fig
+

@@ -58,7 +58,14 @@ st.markdown("""
 
 # ── Chargement données ────────────────────────────────────────────────────
 from app.utils.data_cache import load_base_data
-from app.utils.charts import chart_masi, chart_volume_marche, SEV_COLORS
+from app.utils.charts import (
+    chart_masi,
+    chart_volume_marche,
+    chart_market_stress,
+    gauge_market_stress,
+    SEV_COLORS,
+)
+from src.market_stress import stress_summary_latest
 
 try:
     data = load_base_data()
@@ -89,6 +96,49 @@ if DATA_OK:
     k4.metric("Dernier volume",    f"{vol_last:.0f} M MAD")
     k5.metric("Alertes Critiques", f"{nb_crit}", delta_color="inverse")
     k6.metric("Alertes Modérées",  f"{nb_mod}",  delta_color="inverse")
+
+    # ── Market Stress Score (volatilité + breadth + OIR) — dernière séance ──
+    if "Market_Stress_Score" in df_market.columns and len(df_market) > 0:
+        st.subheader("⚡ Market Stress Score (global)")
+        st.caption(
+            "Indicateur composite 0–100 : volatilité MASI (20j), inverse du breadth, "
+            "et déséquilibre moyen des flux (|OIR| moyen par séance). "
+            "Mis à jour à chaque rechargement des données (dernière séance disponible)."
+        )
+        summ = stress_summary_latest(df_market)
+        g0, g1, g2, g3, g4 = st.columns([1.35, 1, 1, 1, 2.4])
+
+        def _fmt_m(v):
+            if v is None or pd.isna(v):
+                return "—"
+            return f"{float(v):.1f}"
+
+        sc = summ.get("Market_Stress_Score")
+        reg = summ.get("Market_Stress_Regime", "—")
+        with g0:
+            if sc is not None and pd.notna(sc):
+                st.plotly_chart(
+                    gauge_market_stress(sc, reg),
+                    use_container_width=True,
+                )
+            else:
+                st.info("Score de stress indisponible pour la dernière séance.")
+        with g1:
+            st.metric("Stress vol.", _fmt_m(summ.get("Stress_Vol")))
+        with g2:
+            st.metric("Stress breadth", _fmt_m(summ.get("Stress_Breadth")))
+        with g3:
+            st.metric("Stress OIR", _fmt_m(summ.get("Stress_OIR")))
+        with g4:
+            if summ.get("Jour") is not None:
+                st.metric("Dernière séance", str(pd.Timestamp(summ["Jour"]).date()))
+            oir_m = summ.get("OIR_Marche_MeanAbs")
+            st.caption(f"|OIR| moyen marché (séance) : {_fmt_m(oir_m)}")
+        st.plotly_chart(
+            chart_market_stress(df_market),
+            use_container_width=True,
+        )
+        st.divider()
 
     # ── KPIs ML (si disponibles) ─────────────────────────────────────────
     ML_DATA_DIR = Path(__file__).parent.parent / "data"

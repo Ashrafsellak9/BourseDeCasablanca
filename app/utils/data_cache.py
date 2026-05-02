@@ -25,20 +25,27 @@ from src.anomaly_detector import (
     compute_seuils_table,
     summarize_anomalies,
 )
+from src.market_stress import enrich_market_stress_score
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
 
 
 @st.cache_data(show_spinner="Chargement des données 2025...")
 def load_base_data():
-    """Charge les 4 DataFrames enrichis depuis le cache Parquet."""
+    """Charge les DataFrames depuis Parquet et enrichit le marché (Market Stress Score)."""
+    market = pd.read_parquet(DATA_DIR / "market_indicators.parquet")
+    orderflow = pd.read_parquet(DATA_DIR / "orderflow_indicators.parquet")
+    if not market.empty:
+        market = enrich_market_stress_score(
+            market, orderflow if not orderflow.empty else None
+        )
     return {
-        'market':     pd.read_parquet(DATA_DIR / 'market_indicators.parquet'),
-        'instrument': pd.read_parquet(DATA_DIR / 'instrument_indicators.parquet'),
-        'orderflow':  pd.read_parquet(DATA_DIR / 'orderflow_indicators.parquet'),
-        'alerts':     pd.read_parquet(DATA_DIR / 'alert_scores.parquet'),
-        'anomalies':  pd.read_parquet(DATA_DIR / 'all_anomalies.parquet'),
-        'seuils':     pd.read_csv(DATA_DIR / 'seuils_phase3.csv'),
+        "market":     market,
+        "instrument": pd.read_parquet(DATA_DIR / "instrument_indicators.parquet"),
+        "orderflow":  orderflow,
+        "alerts":     pd.read_parquet(DATA_DIR / "alert_scores.parquet"),
+        "anomalies":  pd.read_parquet(DATA_DIR / "all_anomalies.parquet"),
+        "seuils":     pd.read_csv(DATA_DIR / "seuils_phase3.csv"),
     }
 
 
@@ -92,9 +99,16 @@ def process_uploaded_file(file_bytes: bytes, filename: str) -> dict:
 
     # 5. Order flow
     if not df_intra.empty and not df_cours.empty:
-        result['orderflow'] = compute_orderflow_indicators(df_intra, result['instrument'])
+        result['orderflow'] = compute_orderflow_indicators(df_intra, df_cours)
     else:
         result['orderflow'] = pd.DataFrame()
+
+    # 5b. Market Stress (volatilité + breadth + OIR agrégé)
+    if not result["market"].empty:
+        result["market"] = enrich_market_stress_score(
+            result["market"],
+            result["orderflow"] if not result.get("orderflow", pd.DataFrame()).empty else None,
+        )
 
     # 6. Scores alertes
     if not result['instrument'].empty:

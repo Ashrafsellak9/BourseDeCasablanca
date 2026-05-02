@@ -28,7 +28,15 @@ st.title("📈 Vue Marché Global")
 st.caption("Indicateurs agrégés BVC 2025 — MASI, MASI 20, Volumes, Breadth")
 
 from app.utils.data_cache import load_base_data
-from app.utils.charts import chart_masi, chart_volume_marche, BVC_BLUE, BVC_GOLD
+from app.utils.charts import (
+    chart_masi,
+    chart_volume_marche,
+    chart_market_stress,
+    gauge_market_stress,
+    BVC_BLUE,
+    BVC_GOLD,
+)
+from src.market_stress import stress_summary_latest
 from app.utils.streamlit_nav import get_query_param
 
 data       = load_base_data()
@@ -82,10 +90,22 @@ k3.metric("Volatilité 20j",    f"{vol_20j:.3f}%")
 k4.metric("Breadth Moyen",     f"{breadth:.1f}%" if breadth else "—")
 k5.metric("Séances analysées", f"{nb_s}")
 
+if "Market_Stress_Score" in df_f.columns and len(df_f) > 0:
+    summ_f = stress_summary_latest(df_f)
+    sc_f = summ_f.get("Market_Stress_Score")
+    if sc_f is not None and pd.notna(sc_f):
+        st.metric(
+            "Market Stress (fin de période affichée)",
+            f"{float(sc_f):.1f} / 100",
+            delta=str(summ_f.get("Market_Stress_Regime", "")),
+        )
+
 st.divider()
 
 # ── Graphique MASI ────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4 = st.tabs(["📊 MASI & Variation", "📦 Volumes", "🌐 Breadth & HHI", "📋 Données Brutes"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
+    ["📊 MASI & Variation", "📦 Volumes", "🌐 Breadth & HHI", "⚡ Stress marché", "📋 Données Brutes"]
+)
 
 with tab1:
     col_l, col_r = st.columns([3, 1])
@@ -173,9 +193,34 @@ with tab3:
             st.info("HHI non disponible.")
 
 with tab4:
-    display_cols = [c for c in ['Jour','MASI','MSI20','MASI_Return_pct','MASI_Vol_20j',
-                                  'Volume_MAD','Volume_Relatif_Marche','Breadth_pct','HHI_Volume']
-                    if c in df_f.columns]
+    st.markdown(
+        "**Market Stress Score** — composite **0–100** (volatilité MASI 20j, inverse du breadth, "
+        "|OIR| moyen par séance). Chaque composante est ramenée sur [0,100] par rang percentile "
+        "historique ; le score final est la **moyenne** des trois."
+    )
+    if "Market_Stress_Score" in df_f.columns and len(df_f) > 0:
+        summ_tab = stress_summary_latest(df_f)
+        sc_t = summ_tab.get("Market_Stress_Score")
+        reg_t = str(summ_tab.get("Market_Stress_Regime", "—"))
+        c_g, c_ch = st.columns([1, 2.5])
+        with c_g:
+            if sc_t is not None and pd.notna(sc_t):
+                st.plotly_chart(
+                    gauge_market_stress(float(sc_t), reg_t),
+                    use_container_width=True,
+                )
+        with c_ch:
+            st.plotly_chart(chart_market_stress(df_f), use_container_width=True)
+    else:
+        st.info("Scores de stress non disponibles (données marché ou flux d'ordres insuffisants).")
+
+with tab5:
+    display_cols = [c for c in [
+        'Jour', 'MASI', 'MSI20', 'MASI_Return_pct', 'MASI_Vol_20j',
+        'Volume_MAD', 'Volume_Relatif_Marche', 'Breadth_pct', 'HHI_Volume',
+        'Market_Stress_Score', 'Stress_Vol', 'Stress_Breadth', 'Stress_OIR',
+        'OIR_Marche_MeanAbs', 'Market_Stress_Regime',
+    ] if c in df_f.columns]
     df_show = df_f[display_cols].sort_values('Jour', ascending=False).reset_index(drop=True)
     df_show['Volume_MAD'] = (df_show['Volume_MAD'] / 1e6).round(2)
     st.dataframe(df_show.rename(columns={'Volume_MAD':'Volume (M MAD)'}),
