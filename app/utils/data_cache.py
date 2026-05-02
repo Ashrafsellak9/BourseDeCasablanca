@@ -23,6 +23,7 @@ from src.data_loader import load_excel, save_to_cache, validate_format, get_summ
 from src.indicators import (
     compute_market_indicators,
     compute_instrument_indicators,
+    enrich_instrument_sector_peer_volatility,
     compute_orderflow_indicators,
     compute_alert_scores,
     compute_advance_decline_line,
@@ -81,6 +82,12 @@ def load_base_data():
     ):
         _ad = compute_advance_decline_line(instrument[["Jour", "Rendement_pct"]])
         market = market.merge(_ad, on="Jour", how="left")
+    if (
+        not instrument.empty
+        and "Volatilite_20j" in instrument.columns
+        and "Volatilite_vs_Pairs_Ratio" not in instrument.columns
+    ):
+        instrument = enrich_instrument_sector_peer_volatility(instrument, DATA_DIR)
     return {
         "market":     market,
         "instrument": instrument,
@@ -135,7 +142,7 @@ def process_uploaded_file(file_bytes: bytes, filename: str) -> dict:
 
     # 4. Indicateurs instruments
     if not df_cours.empty:
-        result['instrument'] = compute_instrument_indicators(df_cours)
+        result['instrument'] = compute_instrument_indicators(df_cours, data_dir=DATA_DIR)
     else:
         result['instrument'] = pd.DataFrame()
 

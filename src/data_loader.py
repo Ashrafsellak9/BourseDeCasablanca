@@ -103,7 +103,8 @@ def _clean_cours(df: pd.DataFrame) -> pd.DataFrame:
         'cours_meilleure_dem': 'Meilleure_Demande', 'capitalisation': 'Capitalisation',
         'cours_pb_j': 'Cours_Bas', 'cours_ph_j': 'Cours_Haut',
         'volume': 'Volume_MAD', 'quantite_titre': 'Quantite_Titres',
-        'nb_contrat': 'Nb_Contrats'
+        'nb_contrat': 'Nb_Contrats',
+        'secteur': 'Secteur', 'secteur_boursier': 'Secteur',
     }
     df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
     if 'Ticker' in df.columns:

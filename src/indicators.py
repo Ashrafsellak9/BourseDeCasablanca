@@ -10,6 +10,8 @@ Chaque fonction retourne un DataFrame enrichi prêt à l'utilisation
 dans la détection d'anomalies (Phase 3) et le dashboard (Phase 4).
 """
 
+from pathlib import Path
+
 import pandas as pd
 import numpy as np
 from scipy import stats
@@ -17,10 +19,13 @@ import warnings
 
 from src.instrument_segment import (
     assign_instrument_segment,
+    assign_instrument_secteur,
     enrich_market_with_segment_volumes,
 )
 
 warnings.filterwarnings('ignore')
+
+_DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 
 def compute_advance_decline_line(df_cours: pd.DataFrame) -> pd.DataFrame:
@@ -185,7 +190,50 @@ def daily_top5_volume_concentration(df_cours: pd.DataFrame) -> pd.DataFrame:
 # 2. INDICATEURS PAR INSTRUMENT
 # ═══════════════════════════════════════════════════════════════════════════
 
-def compute_instrument_indicators(df_cours: pd.DataFrame) -> pd.DataFrame:
+
+def _add_peer_volatility_vs_sector(df: pd.DataFrame) -> pd.DataFrame:
+    """Colonnes de volatilité 20j vs pairs du même ``Secteur`` le même jour."""
+    if "Secteur" not in df.columns or "Volatilite_20j" not in df.columns:
+        return df
+    g_peer = df.groupby(["Jour", "Secteur"], observed=True)
+    df = df.copy()
+    df["Peers_Secteur_Nb"] = g_peer["Ticker"].transform("nunique")
+    df["Volatilite_Pairs_Median"] = g_peer["Volatilite_20j"].transform("median")
+    df["Volatilite_Pairs_Std"] = g_peer["Volatilite_20j"].transform("std")
+    _solo = df["Peers_Secteur_Nb"] < 2
+    df.loc[_solo, "Volatilite_Pairs_Median"] = np.nan
+    df.loc[_solo, "Volatilite_Pairs_Std"] = np.nan
+    _med = df["Volatilite_Pairs_Median"].replace(0, np.nan)
+    df["Volatilite_vs_Pairs_Ratio"] = df["Volatilite_20j"] / _med
+    _std_ok = df["Volatilite_Pairs_Std"].replace(0, np.nan)
+    df["Z_Volatilite_vs_Pairs"] = np.where(
+        (df["Peers_Secteur_Nb"] >= 3) & _std_ok.notna(),
+        (df["Volatilite_20j"] - df["Volatilite_Pairs_Median"]) / _std_ok,
+        np.nan,
+    )
+    return df
+
+
+def enrich_instrument_sector_peer_volatility(
+    df: pd.DataFrame,
+    data_dir: Path | None = None,
+) -> pd.DataFrame:
+    """
+    Pour Parquets anciens : ajoute ``Secteur`` et les colonnes *pairs sectoriels*
+    sans recalculer tout le pipeline.
+    """
+    if df.empty or "Volatilite_20j" not in df.columns:
+        return df
+    if "Volatilite_vs_Pairs_Ratio" in df.columns:
+        return df
+    out = assign_instrument_secteur(df.copy(), data_dir or _DEFAULT_DATA_DIR)
+    return _add_peer_volatility_vs_sector(out)
+
+
+def compute_instrument_indicators(
+    df_cours: pd.DataFrame,
+    data_dir: Path | None = None,
+) -> pd.DataFrame:
     """
     Calcule les indicateurs journaliers par instrument.
 
@@ -199,10 +247,13 @@ def compute_instrument_indicators(df_cours: pd.DataFrame) -> pd.DataFrame:
     --------
     DataFrame enrichi trié par (Ticker, Jour).
     """
+    _dd = data_dir or _DEFAULT_DATA_DIR
+
     df = df_cours.copy()
     df = df.sort_values(['Ticker', 'Jour']).reset_index(drop=True)
 
-    df = assign_instrument_segment(df)
+    df = assign_instrument_segment(df, _dd)
+    df = assign_instrument_secteur(df, _dd)
 
     # --- Rendement journalier ---
     df['Rendement_pct'] = df.groupby('Ticker')['Cours_Cloture'].pct_change() * 100
@@ -254,6 +305,9 @@ def compute_instrument_indicators(df_cours: pd.DataFrame) -> pd.DataFrame:
                               .rank(pct=True) * 100)
     df['Pct_Volatilite_Rank'] = (df.groupby('Jour')['Volatilite_20j']
                                    .rank(pct=True) * 100)
+
+    # --- Volatilité vs pairs sectoriels (même Jour × Secteur) ---
+    df = _add_peer_volatility_vs_sector(df)
 
     # --- Score de liquidité composite [0-1] ---
     df['Score_Liquidite'] = _score_liquidite(df)

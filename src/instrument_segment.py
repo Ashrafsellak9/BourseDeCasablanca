@@ -100,6 +100,66 @@ def _coerce_segment_value(raw) -> str:
     return n if n else SEG_AUTRE
 
 
+def load_ticker_secteur_map(data_dir: Path | None = None) -> dict[str, str]:
+    """
+    Charge ``data/ref/ticker_secteur.csv`` si présent : ``Ticker`` → libellé de **secteur**
+    (pairs sectoriels pour contextualiser la volatilité).
+
+    Colonnes attendues : ``Ticker``, ``Secteur``.
+    """
+    base = data_dir or Path(__file__).resolve().parent.parent / "data"
+    path = base / "ref" / "ticker_secteur.csv"
+    if not path.exists():
+        return {}
+    try:
+        ov = pd.read_csv(path, dtype=str)
+    except (OSError, pd.errors.EmptyDataError):
+        return {}
+    if "Ticker" not in ov.columns or "Secteur" not in ov.columns:
+        return {}
+    ov = ov.dropna(subset=["Ticker", "Secteur"])
+    ov["Ticker"] = ov["Ticker"].astype(str).str.strip().str.upper()
+    ov["Secteur"] = ov["Secteur"].astype(str).str.strip()
+    return {k: v for k, v in zip(ov["Ticker"], ov["Secteur"]) if k and v}
+
+
+def assign_instrument_secteur(
+    df: pd.DataFrame,
+    data_dir: Path | None = None,
+) -> pd.DataFrame:
+    """
+    Colonne ``Secteur`` pour regrouper les pairs : priorité colonne Excel ``Secteur``,
+    puis ``ticker_secteur.csv``, puis repli **Agrégé — {Segment}** (segment marché).
+    """
+    out = df.copy()
+    if "Segment" not in out.columns:
+        out = assign_instrument_segment(out, data_dir)
+
+    if "Secteur" in out.columns:
+        s = out["Secteur"].astype(str).str.strip()
+        s = s.replace({"nan": "", "None": "", "<NA>": ""})
+        out["Secteur"] = s.replace("", np.nan)
+    else:
+        out["Secteur"] = np.nan
+
+    smap = load_ticker_secteur_map(data_dir)
+    if smap and "Ticker" in out.columns:
+        up = out["Ticker"].astype(str).str.strip().str.upper()
+        mapped = up.map(smap)
+        hit = mapped.notna()
+        out.loc[hit, "Secteur"] = mapped[hit].values
+
+    seg = out["Segment"].astype(str) if "Segment" in out.columns else pd.Series("", index=out.index)
+    mask = out["Secteur"].isna() | (out["Secteur"].astype(str).str.strip().str.len() == 0)
+    _s = seg.loc[mask].astype(str).str.strip()
+    out.loc[mask, "Secteur"] = np.where(
+        _s.eq("") | seg.loc[mask].isna(),
+        "Non classé",
+        "Agrégé — " + _s,
+    )
+    return out
+
+
 def load_ticker_segment_overrides(data_dir: Path | None = None) -> dict[str, str]:
     """Charge ``data/ref/ticker_segment.csv`` si présent : Ticker -> Segment."""
     base = data_dir or Path(__file__).resolve().parent.parent / "data"

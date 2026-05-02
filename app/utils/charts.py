@@ -676,6 +676,147 @@ def chart_instrument_profile(df: pd.DataFrame, ticker: str) -> go.Figure:
     return fig
 
 
+def chart_volatility_vs_sector_peers(
+    df: pd.DataFrame,
+    ticker: str,
+    jour_min=None,
+    jour_max=None,
+) -> go.Figure:
+    """
+    Volatilité 20j du titre vs médiane (et bande interquartile) des **pairs sectoriels**
+    même jour, même ``Secteur``.
+    """
+    need = {"Jour", "Ticker", "Volatilite_20j", "Secteur"}
+    if not need.issubset(df.columns):
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Données insuffisantes (colonnes Secteur / Volatilite_20j).",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            font=dict(size=14),
+        )
+        fig.update_layout(height=360, plot_bgcolor="white")
+        return fig
+
+    d = df.copy()
+    d["Jour"] = pd.to_datetime(d["Jour"])
+    dt = d[d["Ticker"] == ticker].sort_values("Jour")
+    if dt.empty:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Instrument introuvable.",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+        )
+        fig.update_layout(height=360, plot_bgcolor="white")
+        return fig
+
+    secteur = dt["Secteur"].dropna().iloc[-1] if dt["Secteur"].notna().any() else None
+    if not secteur or str(secteur).strip() == "":
+        secteur = "Non classé"
+
+    peer = (
+        d[d["Secteur"] == secteur]
+        .groupby("Jour", observed=True)
+        .agg(
+            Vol_Mediane_Pairs=("Volatilite_20j", "median"),
+            Vol_Q25_Pairs=("Volatilite_20j", lambda s: float(s.quantile(0.25))),
+            Vol_Q75_Pairs=("Volatilite_20j", lambda s: float(s.quantile(0.75))),
+            Peers_Nb=("Ticker", "nunique"),
+        )
+        .reset_index()
+    )
+    dm = dt.merge(peer, on="Jour", how="left")
+    if jour_min is not None:
+        dm = dm[dm["Jour"].dt.date >= jour_min]
+    if jour_max is not None:
+        dm = dm[dm["Jour"].dt.date <= jour_max]
+    if dm.empty:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Aucune donnée sur la période affichée.",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+        )
+        fig.update_layout(height=360, plot_bgcolor="white")
+        return fig
+
+    fig = go.Figure()
+    q25 = dm["Vol_Q25_Pairs"].to_numpy(dtype=float)
+    q75 = dm["Vol_Q75_Pairs"].to_numpy(dtype=float)
+    xj = dm["Jour"]
+    fig.add_trace(
+        go.Scatter(
+            x=xj,
+            y=q75,
+            mode="lines",
+            line=dict(width=0),
+            showlegend=False,
+            legendgroup="iqr",
+            hoverinfo="skip",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=xj,
+            y=q25,
+            mode="lines",
+            line=dict(width=0),
+            fillcolor="rgba(0,48,135,0.12)",
+            fill="tonexty",
+            name="Pairs : IQR",
+            legendgroup="iqr",
+            showlegend=True,
+            hovertemplate="Q25–Q75 pairs %{y:.3f}<extra></extra>",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=xj,
+            y=dm["Vol_Mediane_Pairs"],
+            mode="lines",
+            name="Médiane pairs",
+            line=dict(color="#78909C", width=2, dash="dash"),
+            hovertemplate="Médiane pairs %{y:.3f}<extra></extra>",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=xj,
+            y=dm["Volatilite_20j"],
+            mode="lines",
+            name=f"{ticker}",
+            line=dict(color="#7B1FA2", width=2.5),
+            hovertemplate=f"{ticker} %{{y:.3f}}<extra></extra>",
+        )
+    )
+    _n = int(dm["Peers_Nb"].iloc[-1]) if "Peers_Nb" in dm.columns and len(dm) else 0
+    fig.update_layout(
+        title=(
+            f"Volatilité 20j vs pairs sectoriels — secteur : « {secteur} » "
+            f"(~{_n} titres / jour en fin de série)"
+        ),
+        height=400,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        legend=dict(orientation="h", y=1.08),
+        margin=dict(l=20, r=20, t=60, b=20),
+        yaxis=dict(title="Volatilité 20j (%)", gridcolor="#f0f0f0"),
+        xaxis=dict(showgrid=False),
+        hovermode="x unified",
+    )
+    return fig
+
+
 def chart_anomalies_chronology(df_anom: pd.DataFrame) -> go.Figure:
     """Graphique en barres empilées : anomalies par jour et sévérité."""
     if df_anom.empty:

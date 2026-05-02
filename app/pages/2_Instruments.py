@@ -26,7 +26,12 @@ st.title("🔍 Analyse par Instrument")
 st.caption("Profil complet d'un titre : cours, volatilité, liquidité, flux d'ordres")
 
 from app.utils.data_cache import load_base_data
-from app.utils.charts import chart_instrument_profile, chart_scatter_risk, chart_oir_heatmap
+from app.utils.charts import (
+    chart_instrument_profile,
+    chart_scatter_risk,
+    chart_oir_heatmap,
+    chart_volatility_vs_sector_peers,
+)
 from app.utils.streamlit_nav import get_query_param
 
 data      = load_base_data()
@@ -62,6 +67,10 @@ with st.sidebar:
         _seg = df_instr.loc[df_instr["Ticker"] == ticker, "Segment"].dropna()
         if len(_seg):
             st.caption(f"Segment marché : **{_seg.iloc[-1]}**")
+    if "Secteur" in df_instr.columns:
+        _sec = df_instr.loc[df_instr["Ticker"] == ticker, "Secteur"].dropna()
+        if len(_sec):
+            st.caption(f"Secteur (pairs) : **{_sec.iloc[-1]}**")
 
     date_min = df_instr['Jour'].min().date()
     date_max = df_instr['Jour'].max().date()
@@ -102,7 +111,12 @@ if len(df_t) > 0:
 
     delta_perf = f"{perf:+.2f}% depuis le {d_start}"
     k1.metric("Cours Clôture",    f"{cours_last:,.2f} MAD", delta_perf)
-    k2.metric("Volatilité 20j",   f"{vol_last:.3f}%")
+    _vol_peer_d = None
+    if "Volatilite_vs_Pairs_Ratio" in df_t.columns and len(df_t) > 0:
+        _r = df_t["Volatilite_vs_Pairs_Ratio"].iloc[-1]
+        if pd.notna(_r):
+            _vol_peer_d = f"{_r:.2f}× vs médiane pairs"
+    k2.metric("Volatilité 20j",   f"{vol_last:.3f}%", delta=_vol_peer_d)
     k3.metric("Volume Relatif",   f"{vr_last:.2f}×",
               "⚠️ Spike" if vr_last > 2 else "Normal")
     k4.metric("RSI 14j",          f"{rsi_last:.1f}",
@@ -123,6 +137,47 @@ with tab1:
         st.warning("Aucune donnée pour cet instrument sur la période sélectionnée.")
     else:
         st.plotly_chart(chart_instrument_profile(df_instr, ticker), use_container_width=True)
+
+        if {"Secteur", "Volatilite_20j"}.issubset(df_instr.columns):
+            st.markdown("#### Volatilité vs pairs sectoriels")
+            st.caption(
+                "Comparaison à la **médiane** et à la **bande interquartile** (Q25–Q75) des titres du **même secteur** "
+                "chaque jour. Secteur : colonne **Secteur** dans la feuille Cours si présente, sinon fichier "
+                "`data/ref/ticker_secteur.csv`, sinon repli **Agrégé — {segment marché}** (Actions / OPCVM / …)."
+            )
+            st.plotly_chart(
+                chart_volatility_vs_sector_peers(
+                    df_instr,
+                    ticker,
+                    jour_min=d_start,
+                    jour_max=d_end,
+                ),
+                use_container_width=True,
+                key="chart_vol_vs_peers_tab1",
+            )
+            if {"Volatilite_vs_Pairs_Ratio", "Z_Volatilite_vs_Pairs", "Peers_Secteur_Nb"}.issubset(
+                df_t.columns
+            ) and len(df_t) > 0:
+                _lr = df_t.sort_values("Jour").iloc[-1]
+                c_a, c_b, c_c = st.columns(3)
+                c_a.metric(
+                    "Vol. / médiane pairs",
+                    f"{float(_lr['Volatilite_vs_Pairs_Ratio']):.2f}×"
+                    if pd.notna(_lr.get("Volatilite_vs_Pairs_Ratio"))
+                    else "—",
+                )
+                c_b.metric(
+                    "Z vs dispersion pairs",
+                    f"{float(_lr['Z_Volatilite_vs_Pairs']):.2f}"
+                    if pd.notna(_lr.get("Z_Volatilite_vs_Pairs"))
+                    else "—",
+                )
+                c_c.metric("Nb pairs (séance)", f"{int(_lr['Peers_Secteur_Nb'])}")
+        else:
+            st.info(
+                "Contexte sectoriel indisponible : régénérez les indicateurs instruments "
+                "(notebook `02_indicateurs` ou upload Excel) pour obtenir la colonne **Secteur**."
+            )
 
         # Anomalies de cet instrument
         anom_t = df_anom[
@@ -229,10 +284,13 @@ with tab3:
     st.caption("La taille des bulles = Turnover Ratio | Couleur = Volatilité (rouge = plus volatile)")
 
 with tab4:
-    cols_data = [c for c in ['Jour','Cours_Ref','Cours_Cloture','Rendement_pct',
-                               'Volatilite_20j','Volume_MAD','Volume_Relatif',
-                               'Spread_pct','Turnover_Ratio','RSI_14j','Momentum_20j']
-                 if c in df_t.columns]
+    cols_data = [c for c in [
+        'Jour', 'Secteur', 'Cours_Ref', 'Cours_Cloture', 'Rendement_pct',
+        'Volatilite_20j', 'Volatilite_Pairs_Median', 'Volatilite_vs_Pairs_Ratio',
+        'Z_Volatilite_vs_Pairs', 'Peers_Secteur_Nb',
+        'Volume_MAD', 'Volume_Relatif',
+        'Spread_pct', 'Turnover_Ratio', 'RSI_14j', 'Momentum_20j',
+    ] if c in df_t.columns]
     st.dataframe(df_t[cols_data].sort_values('Jour', ascending=False).reset_index(drop=True),
                  use_container_width=True, height=400)
     csv = df_t[cols_data].to_csv(index=False).encode('utf-8')
