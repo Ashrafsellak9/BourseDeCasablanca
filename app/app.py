@@ -2,6 +2,15 @@
 Système de Surveillance Intelligent — Bourse de Casablanca
 Point d'entrée principal de l'application Streamlit.
 """
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except ImportError:
+    pass
+
 import streamlit as st
 
 # set_page_config MUST be the very first Streamlit call
@@ -14,7 +23,7 @@ st.set_page_config(
 
 # ── Imports après page_config ─────────────────────────────────────────────
 import sys
-from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pandas as pd

@@ -122,6 +122,7 @@ if "Market_Quality_Score" in df_market.columns and len(df_market) >= 6:
         st.plotly_chart(
             chart_market_quality_mini(df_market),
             use_container_width=True,
+            key="mq_mini_full_market",
         )
 
 st.divider()
@@ -134,7 +135,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(
 with tab1:
     col_l, col_r = st.columns([3, 1])
     with col_l:
-        st.plotly_chart(chart_masi(df_f), use_container_width=True)
+        st.plotly_chart(chart_masi(df_f), use_container_width=True, key="chart_masi_tab1")
     with col_r:
         st.markdown("**Statistiques MASI**")
         if 'MASI_Return_pct' in df_f.columns:
@@ -154,7 +155,7 @@ with tab1:
             st.dataframe(stats_df, hide_index=True, use_container_width=True)
 
 with tab2:
-    st.plotly_chart(chart_volume_marche(df_f), use_container_width=True)
+    st.plotly_chart(chart_volume_marche(df_f), use_container_width=True, key="chart_vol_marche_tab2")
 
     # Volume par mois
     df_f['Mois'] = df_f['Jour'].dt.month
@@ -172,7 +173,7 @@ with tab2:
     )
     fig_m.update_layout(height=320, plot_bgcolor='white', showlegend=False,
                          margin=dict(l=20,r=20,t=40,b=20))
-    st.plotly_chart(fig_m)
+    st.plotly_chart(fig_m, key="chart_vol_mois_bar_tab2")
 
 with tab3:
     col_b, col_h = st.columns(2)
@@ -195,7 +196,7 @@ with tab3:
                 yaxis=dict(range=[0,100], ticksuffix='%'),
                 margin=dict(l=20,r=20,t=40,b=20),
             )
-            st.plotly_chart(fig_b)
+            st.plotly_chart(fig_b, key="chart_breadth_tab3")
         else:
             st.info("Breadth non disponible pour cette période.")
 
@@ -212,7 +213,7 @@ with tab3:
                 height=350, plot_bgcolor='white',
                 margin=dict(l=20,r=20,t=40,b=20),
             )
-            st.plotly_chart(fig_h)
+            st.plotly_chart(fig_h, key="chart_hhi_tab3")
         else:
             st.info("HHI non disponible.")
 
@@ -232,9 +233,14 @@ with tab4:
                 st.plotly_chart(
                     gauge_market_stress(float(sc_t), reg_t),
                     use_container_width=True,
+                    key="gauge_market_stress_tab4",
                 )
         with c_ch:
-            st.plotly_chart(chart_market_stress(df_f), use_container_width=True)
+            st.plotly_chart(
+                chart_market_stress(df_f),
+                use_container_width=True,
+                key="chart_market_stress_tab4",
+            )
         if "Market_Quality_Score" in df_f.columns and len(df_f) >= 6:
             tr_f = market_quality_trend_5d(df_f)
             st.markdown("##### Tendance qualité (5 séances) — sur la période filtrée")
@@ -254,6 +260,7 @@ with tab4:
                 st.plotly_chart(
                     chart_market_quality_mini(df_f),
                     use_container_width=True,
+                    key="mq_mini_filtered_period_tab4",
                 )
     else:
         st.info("Scores de stress non disponibles (données marché ou flux d'ordres insuffisants).")

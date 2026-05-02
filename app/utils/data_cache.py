@@ -5,7 +5,16 @@ Charge les données une seule fois et les met en cache avec st.cache_data.
 
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(_ROOT))
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(_ROOT / ".env")
+except ImportError:
+    pass
 
 import pandas as pd
 import numpy as np

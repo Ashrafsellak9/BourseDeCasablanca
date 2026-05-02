@@ -1,8 +1,10 @@
 """
 Page 3 — Centre d'Alertes
 """
+import os
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import streamlit as st
@@ -25,6 +27,10 @@ st.title("🚨 Centre d'Alertes")
 st.caption("Toutes les anomalies détectées — BVC 2025 | 6 méthodes statistiques | 3 niveaux")
 
 from app.utils.data_cache import load_base_data
+from src.critical_alert_notifier import (
+    notify_new_critical_alerts,
+    notification_status_summary,
+)
 from app.utils.charts import (
     chart_anomalies_chronology, chart_heatmap_alerts,
     chart_oir_heatmap, SEV_COLORS
@@ -39,6 +45,19 @@ df_seuils = data['seuils'].copy()
 
 for df in [df_anom, df_alerts, df_of]:
     df['Jour'] = pd.to_datetime(df['Jour'])
+
+_auto_env = os.environ.get("BVC_CRITICAL_ALERT_AUTO", "").lower() in ("1", "true", "yes")
+if _auto_env and "bvc_critical_notify_auto_done" not in st.session_state:
+    st.session_state["bvc_critical_notify_auto_done"] = True
+    _rep_auto = notify_new_critical_alerts(df_anom, df_alerts)
+    if _rep_auto.get("ok"):
+        st.toast(
+            f"Notification envoyée ({_rep_auto.get('new_count', 0)} alerte(s)) — {_rep_auto.get('ref_jour', '')}",
+            icon="🔔",
+        )
+    elif _rep_auto.get("errors"):
+        st.session_state["_bvc_auto_push_errors"] = _rep_auto["errors"]
+        st.toast("Notification push : erreur (voir bas du menu latéral)", icon="⚠️")
 
 # ── Sidebar filtres ───────────────────────────────────────────────────────
 with st.sidebar:
@@ -64,6 +83,13 @@ with st.sidebar:
         min_value=date_min, max_value=date_max,
     )
 
+    _push_errs = st.session_state.pop("_bvc_auto_push_errors", None)
+    if _push_errs:
+        st.divider()
+        st.markdown("**Push auto**")
+        for _e in _push_errs:
+            st.caption(str(_e))
+
 # ── Filtrage ──────────────────────────────────────────────────────────────
 df_f = df_anom[
     (df_anom['Jour'].dt.date >= d_start) &
@@ -87,6 +113,40 @@ k2.metric("🔴 Critiques",       f"{kpis['Critique']:,}")
 k3.metric("🟠 Modérées",        f"{kpis['Modéré']:,}")
 k4.metric("Instruments alertés",f"{kpis['Instruments_Alertés']}")
 k5.metric("Jours avec alerte",  f"{kpis['Jours_avec_Alerte']}")
+
+with st.expander("🔔 Notifications push (e-mail / Slack)", expanded=False):
+    st.markdown(
+        "Envoie les lignes **Critique** pour la **dernière séance** présente dans les données "
+        "(anomalies statistiques + scores d’alerte instruments). Les envois déjà effectués ne sont "
+        "pas dupliqués (fichier d’empreintes sur disque)."
+    )
+    _summ = notification_status_summary()
+    u1, u2, u3 = st.columns(3)
+    u1.metric("E-mail configuré", "Oui" if _summ["email_configured"] else "Non")
+    u2.metric("Slack configuré", "Oui" if _summ["slack_configured"] else "Non")
+    u3.metric("Au moins un canal", "Oui" if (_summ["email_configured"] or _summ["slack_configured"]) else "Non")
+    st.caption(
+        "Variables : `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_TLS`, "
+        "`ALERT_EMAIL_FROM`, `ALERT_EMAIL_TO`, `SLACK_WEBHOOK_URL`. "
+        "Auto au chargement de cette page : `BVC_CRITICAL_ALERT_AUTO=true`."
+    )
+    st.code(_summ["state_path"], language="text")
+
+    if st.button("Envoyer les nouvelles alertes critiques maintenant", type="primary"):
+        with st.spinner("Envoi en cours…"):
+            _rep = notify_new_critical_alerts(df_anom, df_alerts)
+        if _rep.get("ok"):
+            st.success(
+                f"Envoi réussi — {_rep.get('new_count', 0)} nouvelle(s) alerte(s) "
+                f"({_rep.get('ref_jour', '')}). E-mail: {_rep.get('email_sent')}, Slack: {_rep.get('slack_sent')}."
+            )
+        elif _rep.get("skipped"):
+            st.info(_rep.get("reason", "—"))
+        else:
+            st.warning(_rep.get("reason", "Échec ou configuration incomplète."))
+        if _rep.get("errors"):
+            for err in _rep["errors"]:
+                st.error(err)
 
 st.divider()
 
