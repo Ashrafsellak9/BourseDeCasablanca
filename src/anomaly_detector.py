@@ -270,6 +270,8 @@ def detect_market_anomalies(df_market: pd.DataFrame) -> pd.DataFrame:
         'Breadth_pct':             {'methods': ['zscore','percentile','cusum'], 'window': 20},
         'HHI_Volume':              {'methods': ['zscore','percentile','bollinger'], 'window': 30},
         'AD_Line':                 {'methods': ['zscore','percentile','cusum'], 'window': 30},
+        'MASI_VaR_Hist_95':        {'methods': ['zscore','rolling_zscore','percentile'], 'window': 40},
+        'MASI_VaR_Hist_99':        {'methods': ['zscore','rolling_zscore','percentile'], 'window': 40},
     }
 
     for col, cfg in indicator_config.items():
@@ -483,6 +485,8 @@ def compute_seuils_table(
             ('MASI_Vol_20j', 'MASI Volatilité 20j'),
             ('Breadth_pct', 'Breadth (% hausse)'),
             ('AD_Line', 'Advance-Decline Line (cumul)'),
+            ('MASI_VaR_Hist_95', 'MASI VaR historique 95 %'),
+            ('MASI_VaR_Hist_99', 'MASI VaR historique 99 %'),
         ]:
             if col in df_market.columns:
                 _add(df_market[col], nom, 'Marché Global')

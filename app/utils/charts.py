@@ -23,6 +23,105 @@ BVC_GOLD   = '#C8A84B'
 BVC_LIGHT  = '#EAF0FB'
 
 
+def _macro_event_line_color(type_str: str) -> str:
+    """Couleur selon le type d'événement (politique monétaire vs publication)."""
+    t = (type_str or "").lower()
+    if any(k in t for k in ("politique", "monétaire", "bam", "taux", "conseil", "directive")):
+        return "#B71C1C"
+    if any(k in t for k in ("publication", "ipc", "pib", "hcp", "emploi", "compte", "enquête")):
+        return "#1565C0"
+    return "#455A64"
+
+
+def apply_macro_event_vlines(
+    fig: go.Figure,
+    df_events: pd.DataFrame | None,
+    *,
+    subplot_rows: int = 1,
+    subplot_cols: int = 1,
+    annotate_on_row: int | None = 1,
+    max_annotations: int = 14,
+    show_labels: bool = True,
+) -> go.Figure:
+    """
+    Superpose des **lignes verticales** (décisions BAM, publications macro, etc.).
+
+    Utilise ``layout_shapes`` + ``annotations`` (``yref='paper'``) pour rester
+    compatible avec les sous-graphiques et éviter les bugs ``add_vline`` /
+    ``annotation_text`` de certaines versions Plotly / pandas.
+    Les paramètres ``subplot_rows`` / ``annotate_on_row`` sont conservés pour
+    l’API ; la ligne traverse toute la hauteur utile du graphique.
+
+    ``show_labels=False`` : trace uniquement les lignes (pas d’annotations texte).
+    """
+    _ = (subplot_rows, subplot_cols, annotate_on_row)  # compatibilité d’appel ; rendu = pleine hauteur
+
+    if df_events is None or len(df_events) == 0:
+        return fig
+
+    ev = df_events.copy()
+    ev["Jour"] = pd.to_datetime(ev["Jour"], errors="coerce").dt.normalize()
+    ev = ev.dropna(subset=["Jour"])
+    if ev.empty:
+        return fig
+
+    rows_agg = []
+    for jd, grp in ev.groupby("Jour", sort=True):
+        titres = " • ".join(dict.fromkeys(grp["Titre"].astype(str).tolist()))
+        if len(titres) > 200:
+            titres = titres[:197] + "…"
+        typ = ""
+        if "Type" in grp.columns:
+            for t in grp["Type"].astype(str):
+                if str(t).strip():
+                    typ = str(t).strip()
+                    break
+        rows_agg.append({"Jour": jd, "Titre": titres, "Type": typ})
+    agg = pd.DataFrame(rows_agg)
+    show_text = len(agg) <= max_annotations
+
+    shapes = list(fig.layout.shapes) if fig.layout.shapes else []
+    annotations = list(fig.layout.annotations) if fig.layout.annotations else []
+
+    for i, (_, er) in enumerate(agg.iterrows()):
+        xd = pd.Timestamp(er["Jour"])
+        color = _macro_event_line_color(er.get("Type", ""))
+        short = str(er["Titre"]) if show_text else None
+
+        shapes.append(
+            dict(
+                type="line",
+                x0=xd,
+                x1=xd,
+                y0=0,
+                y1=1,
+                xref="x",
+                yref="paper",
+                line=dict(color=color, width=1.5, dash="dash"),
+                layer="above",
+            )
+        )
+        if short:
+            y_paper = min(0.995, 0.88 + (i % 8) * 0.014)
+            annotations.append(
+                dict(
+                    x=xd,
+                    y=y_paper,
+                    xref="x",
+                    yref="paper",
+                    text=short,
+                    showarrow=False,
+                    textangle=-70,
+                    font=dict(size=9, color=color),
+                    xanchor="left",
+                    align="left",
+                )
+            )
+
+    fig.update_layout(shapes=shapes, annotations=annotations)
+    return fig
+
+
 def kpi_card(label: str, value: str, delta: str = '', color: str = BVC_BLUE) -> str:
     """Retourne le HTML d'une carte KPI."""
     delta_html = f'<span style="font-size:12px;color:#888">{delta}</span>' if delta else ''
@@ -35,7 +134,11 @@ def kpi_card(label: str, value: str, delta: str = '', color: str = BVC_BLUE) -> 
     </div>"""
 
 
-def chart_masi(df_market: pd.DataFrame) -> go.Figure:
+def chart_masi(
+    df_market: pd.DataFrame,
+    df_macro_events: pd.DataFrame | None = None,
+    macro_event_labels: bool = True,
+) -> go.Figure:
     """Graphique MASI avec volatilité rolling."""
     fig = make_subplots(
         rows=2, cols=1, shared_xaxes=True,
@@ -73,10 +176,185 @@ def chart_masi(df_market: pd.DataFrame) -> go.Figure:
     )
     fig.update_xaxes(showgrid=False)
     fig.update_yaxes(showgrid=True, gridcolor='#f0f0f0')
-    return fig
+    return apply_macro_event_vlines(
+        fig,
+        df_macro_events,
+        subplot_rows=2,
+        subplot_cols=1,
+        annotate_on_row=1,
+        show_labels=macro_event_labels,
+    )
 
 
-def chart_volume_marche(df_market: pd.DataFrame) -> go.Figure:
+def chart_masi_msi20_rolling_correlation(
+    df_market: pd.DataFrame,
+    window: int = 20,
+    df_macro_events: pd.DataFrame | None = None,
+    macro_event_labels: bool = True,
+) -> go.Figure:
+    """
+    Corrélation de Pearson glissante entre les **rendements journaliers** MASI et MSI 20.
+    Une baisse marquée de ρ suggère une **divergence** (comportements décorrélés) entre les deux indices.
+    """
+    need = {"Jour", "MASI", "MSI20"}
+    if not need.issubset(df_market.columns):
+        fig = go.Figure()
+        fig.add_annotation(
+            text="MSI 20 ou MASI indisponibles (feuille Indices).",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            font=dict(size=14),
+        )
+        fig.update_layout(height=340, plot_bgcolor="white")
+        return fig
+
+    w = int(max(5, min(window, 120)))
+    min_p = max(5, w // 2)
+
+    dm = df_market.sort_values("Jour").copy()
+    dm["Jour"] = pd.to_datetime(dm["Jour"])
+    rm = dm["MASI"].pct_change() * 100
+    ri = dm["MSI20"].pct_change() * 100
+    rho = rm.rolling(w, min_periods=min_p).corr(ri)
+
+    fig = go.Figure()
+    fig.add_hrect(
+        y0=-1,
+        y1=0.35,
+        fillcolor="rgba(198,40,40,0.06)",
+        layer="below",
+        line_width=0,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=dm["Jour"],
+            y=rho,
+            mode="lines",
+            name=f"ρ ({w} j.)",
+            line=dict(color=BVC_BLUE, width=2.2),
+            hovertemplate="ρ = %{y:.3f}<extra></extra>",
+        )
+    )
+    fig.add_hline(y=0, line_color="#333", line_width=1)
+    fig.add_hline(
+        y=0.7,
+        line_dash="dash",
+        line_color="#2E7D32",
+        annotation_text="Forte co-mouvement (~0,7)",
+        annotation_position="right",
+    )
+    fig.add_hline(
+        y=0.35,
+        line_dash="dot",
+        line_color="#C62828",
+        annotation_text="Zone de divergence",
+        annotation_position="right",
+    )
+    fig.add_hline(y=1.0, line_dash="dot", line_color="gray", line_width=1)
+    fig.add_hline(y=-1.0, line_dash="dot", line_color="gray", line_width=1)
+
+    fig.update_layout(
+        title=f"Corrélation glissante MASI / MSI 20 — rendements journaliers (fenêtre {w} j.)",
+        height=360,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        showlegend=False,
+        margin=dict(l=20, r=120, t=50, b=20),
+        yaxis=dict(
+            title="Coefficient ρ",
+            range=[-1.05, 1.05],
+            gridcolor="#f0f0f0",
+            zeroline=False,
+        ),
+        xaxis=dict(showgrid=False, title="Date"),
+        hovermode="x unified",
+    )
+    return apply_macro_event_vlines(
+        fig,
+        df_macro_events,
+        subplot_rows=1,
+        subplot_cols=1,
+        annotate_on_row=1,
+        show_labels=macro_event_labels,
+    )
+
+
+def chart_masi_historic_var(
+    df_market: pd.DataFrame,
+    df_macro_events: pd.DataFrame | None = None,
+    macro_event_labels: bool = True,
+) -> go.Figure:
+    """
+    VaR historique **1 jour** sur les rendements MASI (%), seuils **95 %** et **99 %**,
+    fenêtre glissante (recalcul quotidien).
+    """
+    need = {"Jour", "MASI_VaR_Hist_95", "MASI_VaR_Hist_99"}
+    if not need.issubset(df_market.columns):
+        fig = go.Figure()
+        fig.add_annotation(
+            text="VaR historique indisponible (colonnes absentes — régénérer les indicateurs marché).",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            font=dict(size=14),
+        )
+        fig.update_layout(height=340, plot_bgcolor="white")
+        return fig
+
+    dm = df_market.sort_values("Jour").copy()
+    dm["Jour"] = pd.to_datetime(dm["Jour"])
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=dm["Jour"],
+            y=dm["MASI_VaR_Hist_95"],
+            mode="lines",
+            name="VaR 95 %",
+            line=dict(color="#E65100", width=2.2),
+            hovertemplate="VaR 95 % = %{y:.3f}%<extra></extra>",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=dm["Jour"],
+            y=dm["MASI_VaR_Hist_99"],
+            mode="lines",
+            name="VaR 99 %",
+            line=dict(color="#B71C1C", width=2.2),
+            hovertemplate="VaR 99 % = %{y:.3f}%<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        title="MASI — VaR historique (1 jour, rendements en %)",
+        height=380,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        legend=dict(orientation="h", y=1.06),
+        margin=dict(l=20, r=20, t=50, b=20),
+        yaxis=dict(title="VaR (%)", gridcolor="#f0f0f0", rangemode="tozero"),
+        xaxis=dict(showgrid=False, title="Date"),
+        hovermode="x unified",
+    )
+    return apply_macro_event_vlines(
+        fig,
+        df_macro_events,
+        subplot_rows=1,
+        subplot_cols=1,
+        annotate_on_row=1,
+        show_labels=macro_event_labels,
+    )
+
+
+def chart_volume_marche(
+    df_market: pd.DataFrame,
+    df_macro_events: pd.DataFrame | None = None,
+    macro_event_labels: bool = True,
+) -> go.Figure:
     """Volume journalier avec moyenne mobile et seuil P99."""
     p99 = df_market['Volume_MAD'].quantile(0.99)
     mu  = df_market['Volume_MAD'].mean()
@@ -110,7 +388,14 @@ def chart_volume_marche(df_market: pd.DataFrame) -> go.Figure:
         legend=dict(orientation='h', y=1.02),
         margin=dict(l=20, r=20, t=40, b=20),
     )
-    return fig
+    return apply_macro_event_vlines(
+        fig,
+        df_macro_events,
+        subplot_rows=1,
+        subplot_cols=1,
+        annotate_on_row=1,
+        show_labels=macro_event_labels,
+    )
 
 
 def chart_volume_top5_concentration(df_market: pd.DataFrame) -> go.Figure:
@@ -410,7 +695,11 @@ def chart_breadth_hhi_regimes(df_market: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def chart_advance_decline_line(df_market: pd.DataFrame) -> go.Figure:
+def chart_advance_decline_line(
+    df_market: pd.DataFrame,
+    df_macro_events: pd.DataFrame | None = None,
+    macro_event_labels: bool = True,
+) -> go.Figure:
     """
     Ligne Advance-Decline cumulée (participation long terme) et net journalier (hausse − baisse).
     """
@@ -495,7 +784,14 @@ def chart_advance_decline_line(df_market: pd.DataFrame) -> go.Figure:
             showlegend=False,
             margin=dict(l=50, r=20, t=50, b=20),
         )
-        return fig
+        return apply_macro_event_vlines(
+            fig,
+            df_macro_events,
+            subplot_rows=2,
+            subplot_cols=1,
+            annotate_on_row=1,
+            show_labels=macro_event_labels,
+        )
 
     fig = go.Figure()
     fig.add_trace(
@@ -518,7 +814,14 @@ def chart_advance_decline_line(df_market: pd.DataFrame) -> go.Figure:
         yaxis_title="Cumul",
         xaxis_title="Date",
     )
-    return fig
+    return apply_macro_event_vlines(
+        fig,
+        df_macro_events,
+        subplot_rows=1,
+        subplot_cols=1,
+        annotate_on_row=1,
+        show_labels=macro_event_labels,
+    )
 
 
 def market_has_segment_volumes(df: pd.DataFrame) -> bool:
@@ -925,7 +1228,11 @@ def chart_scatter_risk(df_instr: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def chart_market_stress(df_market: pd.DataFrame) -> go.Figure:
+def chart_market_stress(
+    df_market: pd.DataFrame,
+    df_macro_events: pd.DataFrame | None = None,
+    macro_event_labels: bool = True,
+) -> go.Figure:
     """
     Score de stress marché composite + décomposition (volatilité, breadth, OIR).
     Mis à jour à chaque rechargement des données (dernière séance = bord droit du graphique).
@@ -991,7 +1298,14 @@ def chart_market_stress(df_market: pd.DataFrame) -> go.Figure:
     )
     fig.update_yaxes(range=[0, 105], row=1, col=1)
     fig.update_yaxes(range=[0, 105], row=2, col=1)
-    return fig
+    return apply_macro_event_vlines(
+        fig,
+        df_macro_events,
+        subplot_rows=2,
+        subplot_cols=1,
+        annotate_on_row=1,
+        show_labels=macro_event_labels,
+    )
 
 
 def gauge_market_stress(score: float, regime: str) -> go.Figure:

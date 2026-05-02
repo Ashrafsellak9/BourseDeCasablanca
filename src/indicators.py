@@ -27,6 +27,10 @@ warnings.filterwarnings('ignore')
 
 _DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
+# VaR historique MASI : fenêtre glissante (rendements journaliers en %)
+MASI_VAR_HIST_WINDOW = 252
+MASI_VAR_HIST_MIN_PERIODS = 60
+
 
 def compute_advance_decline_line(df_cours: pd.DataFrame) -> pd.DataFrame:
     """
@@ -73,7 +77,8 @@ def compute_market_indicators(
 
     Retourne
     --------
-    DataFrame journalier avec tous les indicateurs marché.
+    DataFrame journalier avec tous les indicateurs marché
+    (dont **VaR historique** MASI 95 % / 99 % sur rendements quotidiens).
     """
     # --- Base : indicateurs agrégés ---
     df = df_ind[['Jour', 'Volume_MAD', 'Quantite_Titres', 'Nb_Contrats']].copy()
@@ -97,9 +102,28 @@ def compute_market_indicators(
     # --- Rendement MASI (depuis cours MASI) ---
     df['MASI_Return_pct'] = df['MASI'].pct_change() * 100
 
+    # --- Rendement MSI 20 + corrélation glissante MASI / MSI20 (divergences inter-indices) ---
+    if 'MSI20' in df.columns:
+        df['MSI20_Return_pct'] = df['MSI20'].pct_change() * 100
+        df['Corr_MASI_MSI20_20j'] = (
+            df['MASI_Return_pct']
+            .rolling(20, min_periods=10)
+            .corr(df['MSI20_Return_pct'])
+        )
+
     # --- Volatilité rolling du MASI ---
     df['MASI_Vol_5j'] = df['MASI_Return_pct'].rolling(5, min_periods=3).std()
     df['MASI_Vol_20j'] = df['MASI_Return_pct'].rolling(20, min_periods=10).std()
+
+    # --- VaR historique MASI (rendements % ; quantiles de la fenêtre glissante) ---
+    # Pertes exprimées en valeur positive (%): VaR = -Q_alpha(r), recalculé chaque jour.
+    _r_m = df['MASI_Return_pct']
+    df['MASI_VaR_Hist_95'] = (
+        -_r_m.rolling(MASI_VAR_HIST_WINDOW, min_periods=MASI_VAR_HIST_MIN_PERIODS).quantile(0.05)
+    ).clip(lower=0)
+    df['MASI_VaR_Hist_99'] = (
+        -_r_m.rolling(MASI_VAR_HIST_WINDOW, min_periods=MASI_VAR_HIST_MIN_PERIODS).quantile(0.01)
+    ).clip(lower=0)
 
     # --- Volume relatif du marché ---
     df['Vol_Moyen_20j'] = df['Volume_MAD'].rolling(20, min_periods=5).mean()
@@ -141,12 +165,56 @@ def compute_market_indicators(
         _zcols.append('Volume_Top5_Pct')
     if 'AD_Line' in df.columns:
         _zcols.append('AD_Line')
+    if 'MASI_VaR_Hist_95' in df.columns:
+        _zcols.append('MASI_VaR_Hist_95')
+    if 'MASI_VaR_Hist_99' in df.columns:
+        _zcols.append('MASI_VaR_Hist_99')
     for col in _zcols:
         if col in df.columns:
             df[f'Z_{col}'] = _zscore_series(df[col])
 
     df = df.sort_values('Jour').reset_index(drop=True)
     return df
+
+
+def enrich_market_masi_msi20_rolling_corr(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Pour Parquets anciens : ajoute ``MSI20_Return_pct`` et ``Corr_MASI_MSI20_20j``
+    si MASI / MSI20 sont présents.
+    """
+    if df.empty or 'MSI20' not in df.columns or 'MASI' not in df.columns:
+        return df
+    if 'Corr_MASI_MSI20_20j' in df.columns:
+        return df
+    out = df.sort_values('Jour').copy()
+    if 'MASI_Return_pct' not in out.columns:
+        out['MASI_Return_pct'] = out['MASI'].pct_change() * 100
+    out['MSI20_Return_pct'] = out['MSI20'].pct_change() * 100
+    out['Corr_MASI_MSI20_20j'] = (
+        out['MASI_Return_pct']
+        .rolling(20, min_periods=10)
+        .corr(out['MSI20_Return_pct'])
+    )
+    return out
+
+
+def enrich_market_historic_var(
+    df: pd.DataFrame,
+    window: int = MASI_VAR_HIST_WINDOW,
+    min_periods: int = MASI_VAR_HIST_MIN_PERIODS,
+) -> pd.DataFrame:
+    """
+    Ajoute ``MASI_VaR_Hist_95`` et ``MASI_VaR_Hist_99`` si absents (Parquets anciens).
+    """
+    if df.empty or 'MASI_Return_pct' not in df.columns:
+        return df
+    if 'MASI_VaR_Hist_95' in df.columns and 'MASI_VaR_Hist_99' in df.columns:
+        return df
+    out = df.sort_values('Jour').copy()
+    r = out['MASI_Return_pct']
+    out['MASI_VaR_Hist_95'] = (-r.rolling(window, min_periods=min_periods).quantile(0.05)).clip(lower=0)
+    out['MASI_VaR_Hist_99'] = (-r.rolling(window, min_periods=min_periods).quantile(0.01)).clip(lower=0)
+    return out
 
 
 def _hhi_volume(grp: pd.DataFrame) -> float:

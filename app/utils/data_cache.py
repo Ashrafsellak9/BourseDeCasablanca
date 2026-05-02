@@ -24,6 +24,8 @@ from src.indicators import (
     compute_market_indicators,
     compute_instrument_indicators,
     enrich_instrument_sector_peer_volatility,
+    enrich_market_masi_msi20_rolling_corr,
+    enrich_market_historic_var,
     compute_orderflow_indicators,
     compute_alert_scores,
     compute_advance_decline_line,
@@ -50,6 +52,10 @@ DATA_DIR = Path(__file__).parent.parent.parent / "data"
 def load_base_data():
     """Charge les DataFrames depuis Parquet et enrichit le marché (Market Stress Score)."""
     market = pd.read_parquet(DATA_DIR / "market_indicators.parquet")
+    if not market.empty and "Corr_MASI_MSI20_20j" not in market.columns:
+        market = enrich_market_masi_msi20_rolling_corr(market)
+    if not market.empty and "MASI_VaR_Hist_95" not in market.columns:
+        market = enrich_market_historic_var(market)
     orderflow = pd.read_parquet(DATA_DIR / "orderflow_indicators.parquet")
     instrument = pd.read_parquet(DATA_DIR / "instrument_indicators.parquet")
     if not market.empty:

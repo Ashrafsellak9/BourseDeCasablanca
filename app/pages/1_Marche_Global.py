@@ -25,11 +25,15 @@ st.markdown("""
 </style>""", unsafe_allow_html=True)
 
 st.title("📈 Vue Marché Global")
-st.caption("Indicateurs agrégés BVC 2025 — MASI, MASI 20, Volumes, Breadth, Advance-Decline")
+st.caption(
+    "Indicateurs agrégés BVC 2025 — MASI, MSI 20, Volumes, Breadth, Advance-Decline, VaR historique"
+)
 
 from app.utils.data_cache import load_base_data
 from app.utils.charts import (
     chart_masi,
+    chart_masi_msi20_rolling_correlation,
+    chart_masi_historic_var,
     chart_volume_marche,
     chart_volume_top5_concentration,
     chart_volume_with_forecast,
@@ -45,6 +49,8 @@ from app.utils.charts import (
     BVC_GOLD,
 )
 from src.market_stress import stress_summary_latest, market_quality_trend_5d
+from src.macro_events import load_macro_events, filter_macro_events_for_period
+from src.indicators import MASI_VAR_HIST_WINDOW, MASI_VAR_HIST_MIN_PERIODS
 from app.utils.streamlit_nav import get_query_param
 
 
@@ -68,6 +74,9 @@ df_market['Jour'] = pd.to_datetime(df_market['Jour'])
 df_instr   = data['instrument'].copy()
 df_instr['Jour'] = pd.to_datetime(df_instr['Jour'])
 
+_DATA_ROOT = Path(__file__).resolve().parent.parent.parent / "data"
+_macro_master = load_macro_events(_DATA_ROOT)
+
 # ── Filtres sidebar ───────────────────────────────────────────────────────
 date_min = df_market['Jour'].min().date()
 date_max = df_market['Jour'].max().date()
@@ -90,11 +99,44 @@ with st.sidebar:
         max_value=date_max,
     )
     indice_sel = st.selectbox("Indice", ["MASI", "MSI20", "Les deux"])
+    st.markdown("**Jalons macro**")
+    hide_macro_lines = st.checkbox(
+        "Masquer les jalons macro sur les graphiques",
+        value=False,
+        key="marche_hide_macro_lines",
+    )
+    hide_macro_labels_only = st.checkbox(
+        "Masquer uniquement les libellés (garder les lignes en pointillés)",
+        value=False,
+        key="marche_hide_macro_labels",
+        disabled=hide_macro_lines,
+        help="Utile quand le graphique est chargé : les dates restent visibles via les lignes.",
+    )
+    _mp_side = filter_macro_events_for_period(_macro_master, d_start, d_end)
+    with st.expander(f"📅 Calendrier macro — période ({len(_mp_side)} évén.)"):
+        st.caption(
+            "Fichier éditable : `data/ref/macro_events.csv` — colonnes **Jour**, **Titre**, **Type** "
+            "(ex. *Politique monétaire*, *Publication macro*), **Source** optionnelle. "
+            "Utilisez les cases **Masquer…** ci-dessus pour retirer lignes ou libellés des graphiques."
+        )
+        if _mp_side.empty:
+            st.info("Aucun événement dans l’intervalle sélectionné.")
+        else:
+            _cols = [c for c in ("Jour", "Titre", "Type", "Source") if c in _mp_side.columns]
+            st.dataframe(_mp_side[_cols], hide_index=True, use_container_width=True)
 
 df_f = df_market[
     (df_market['Jour'].dt.date >= d_start) &
     (df_market['Jour'].dt.date <= d_end)
 ].copy()
+
+_macro_period = filter_macro_events_for_period(_macro_master, d_start, d_end)
+macro_ctx = (
+    None
+    if (hide_macro_lines or _macro_period.empty)
+    else _macro_period
+)
+macro_event_labels = (not hide_macro_labels_only) if macro_ctx is not None else True
 
 # ── KPIs ─────────────────────────────────────────────────────────────────
 st.subheader("Indicateurs Clés")
@@ -114,6 +156,29 @@ k2.metric("Volume Moy./Séance",f"{vol_moy:.0f} M MAD", f"Max: {vol_max:.0f} M M
 k3.metric("Volatilité 20j",    f"{vol_20j:.3f}%")
 k4.metric("Breadth Moyen",     f"{breadth:.1f}%" if breadth else "—")
 k5.metric("Séances analysées", f"{nb_s}")
+
+if (
+    "MASI_VaR_Hist_95" in df_f.columns
+    and "MASI_VaR_Hist_99" in df_f.columns
+    and len(df_f) > 0
+):
+    _lr_var = df_f.sort_values("Jour").iloc[-1]
+    _v95 = _lr_var.get("MASI_VaR_Hist_95")
+    _v99 = _lr_var.get("MASI_VaR_Hist_99")
+    st.markdown("**VaR historique MASI (fin de période affichée)**")
+    v_a, v_b = st.columns(2)
+    with v_a:
+        st.metric(
+            "VaR 1j — 95 %",
+            f"{float(_v95):.3f} %" if pd.notna(_v95) else "—",
+            help="Perte potentielle maximale « normale » à 1 jour, seuil 95 % (fenêtre glissante).",
+        )
+    with v_b:
+        st.metric(
+            "VaR 1j — 99 %",
+            f"{float(_v99):.3f} %" if pd.notna(_v99) else "—",
+            help="Perte potentielle maximale « normale » à 1 jour, seuil 99 % (fenêtre glissante).",
+        )
 
 if "Market_Stress_Score" in df_f.columns and len(df_f) > 0:
     summ_f = stress_summary_latest(df_f)
@@ -159,7 +224,11 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(
 with tab1:
     col_l, col_r = st.columns([3, 1])
     with col_l:
-        st.plotly_chart(chart_masi(df_f), use_container_width=True, key="chart_masi_tab1")
+        st.plotly_chart(
+            chart_masi(df_f, macro_ctx, macro_event_labels=macro_event_labels),
+            use_container_width=True,
+            key="chart_masi_tab1",
+        )
     with col_r:
         st.markdown("**Statistiques MASI**")
         if 'MASI_Return_pct' in df_f.columns:
@@ -178,8 +247,55 @@ with tab1:
             })
             st.dataframe(stats_df, hide_index=True, use_container_width=True)
 
+    if {"MASI_VaR_Hist_95", "MASI_VaR_Hist_99"}.issubset(df_f.columns) and len(df_f) >= 5:
+        st.markdown("#### VaR historique MASI (95 % / 99 %)")
+        st.caption(
+            f"**VaR à 1 jour** sur rendements MASI (%), recalculé **chaque séance** : "
+            f"quantiles empiriques sur une fenêtre glissante de **{MASI_VAR_HIST_WINDOW}** jours ouvrés "
+            f"(minimum **{MASI_VAR_HIST_MIN_PERIODS}** observations pour l’estimation). "
+            "Les courbes indiquent la magnitude de perte (en %) non dépassée avec probabilité 95 % ou 99 % "
+            "si la distribution passée se reproduit."
+        )
+        st.plotly_chart(
+            chart_masi_historic_var(df_f, macro_ctx, macro_event_labels=macro_event_labels),
+            use_container_width=True,
+            key="chart_masi_var_tab1",
+        )
+
+    if {"MASI", "MSI20"}.issubset(df_f.columns) and len(df_f) >= 15:
+        st.markdown("#### Corrélation glissante MASI / MSI 20")
+        st.caption(
+            "Coefficient de **corrélation de Pearson** entre les rendements journaliers des deux indices "
+            "(ρ ∈ [−1, 1]). Une ρ qui **retombe** sous ~0,35–0,5 indique souvent une **découpling** : "
+            "le large cap (MASI) et la petite cap (MSI 20) ne bougent plus de concert."
+        )
+        _cw = st.slider(
+            "Fenêtre de corrélation (jours ouvrés)",
+            min_value=10,
+            max_value=60,
+            value=20,
+            step=1,
+            key="corr_masi_msi20_window",
+        )
+        st.plotly_chart(
+            chart_masi_msi20_rolling_correlation(
+                df_f,
+                window=_cw,
+                df_macro_events=macro_ctx,
+                macro_event_labels=macro_event_labels,
+            ),
+            use_container_width=True,
+            key="chart_masi_msi20_corr_tab1",
+        )
+    elif "MSI20" not in df_f.columns:
+        st.info("Corrélation MASI / MSI 20 : indice MSI 20 absent des données marché.")
+
 with tab2:
-    st.plotly_chart(chart_volume_marche(df_f), use_container_width=True, key="chart_vol_marche_tab2")
+    st.plotly_chart(
+        chart_volume_marche(df_f, macro_ctx, macro_event_labels=macro_event_labels),
+        use_container_width=True,
+        key="chart_vol_marche_tab2",
+    )
 
     st.markdown("#### Prévision de volume (contexte)")
     st.caption(
@@ -351,7 +467,7 @@ with tab3:
         "haussière vs baissière, en complément du **breadth** (part en %)."
     )
     st.plotly_chart(
-        chart_advance_decline_line(df_f),
+        chart_advance_decline_line(df_f, macro_ctx, macro_event_labels=macro_event_labels),
         use_container_width=True,
         key="chart_ad_line_tab3",
     )
@@ -411,7 +527,7 @@ with tab4:
                 )
         with c_ch:
             st.plotly_chart(
-                chart_market_stress(df_f),
+                chart_market_stress(df_f, macro_ctx, macro_event_labels=macro_event_labels),
                 use_container_width=True,
                 key="chart_market_stress_tab4",
             )
@@ -441,7 +557,9 @@ with tab4:
 
 with tab5:
     display_cols = [c for c in [
-        'Jour', 'MASI', 'MSI20', 'MASI_Return_pct', 'MASI_Vol_20j',
+        'Jour', 'MASI', 'MSI20', 'MASI_Return_pct', 'MSI20_Return_pct',
+        'Corr_MASI_MSI20_20j', 'MASI_Vol_20j',
+        'MASI_VaR_Hist_95', 'MASI_VaR_Hist_99', 'Z_MASI_VaR_Hist_95', 'Z_MASI_VaR_Hist_99',
         'Volume_MAD', 'Volume_Top5_Pct', 'Z_Volume_Top5_Pct', 'Volume_MAD_Actions', 'Volume_MAD_OPCVM', 'Volume_MAD_Obligations', 'Volume_MAD_Autre',
         'Volume_Somme_Segments', 'Volume_Segments_vs_Marche_pct',
         'Volume_Relatif_Marche', 'Breadth_pct', 'HHI_Volume',
@@ -472,6 +590,12 @@ with tab5:
         'AD_Net': 'AD net (jour)',
         'AD_Line': 'AD Line (cumul)',
         'Z_AD_Line': 'Z-score AD Line',
+        'MSI20_Return_pct': 'MSI 20 rendement %',
+        'Corr_MASI_MSI20_20j': 'ρ MASI / MSI20 (20j)',
+        'MASI_VaR_Hist_95': 'VaR hist. MASI 95 % (%)',
+        'MASI_VaR_Hist_99': 'VaR hist. MASI 99 % (%)',
+        'Z_MASI_VaR_Hist_95': 'Z-score VaR 95 %',
+        'Z_MASI_VaR_Hist_99': 'Z-score VaR 99 %',
     }
     _seg_labels = {
         'Volume_MAD_Actions': 'Vol. Actions (M MAD)',
