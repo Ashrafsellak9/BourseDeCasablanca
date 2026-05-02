@@ -8,6 +8,8 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 
+from src.instrument_segment import SEGMENT_VOLUME_COLUMNS
+
 SEV_COLORS = {
     'Normal':   '#4CAF50',
     'Faible':   '#FFC107',
@@ -106,6 +108,137 @@ def chart_volume_marche(df_market: pd.DataFrame) -> go.Figure:
         plot_bgcolor='white', paper_bgcolor='white',
         legend=dict(orientation='h', y=1.02),
         margin=dict(l=20, r=20, t=40, b=20),
+    )
+    return fig
+
+
+def chart_volume_top5_concentration(df_market: pd.DataFrame) -> go.Figure:
+    """Évolution de la part du volume journalier détenue par les 5 instruments les plus actifs (%)."""
+    if "Volume_Top5_Pct" not in df_market.columns:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Indicateur Volume_Top5_Pct indisponible (régénérer les Parquet ou recharger les données).",
+            xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False, font=dict(size=13),
+        )
+        fig.update_layout(height=300, plot_bgcolor="white")
+        return fig
+
+    dm = df_market.copy()
+    dm["Jour"] = pd.to_datetime(dm["Jour"])
+    y = dm["Volume_Top5_Pct"].clip(lower=0, upper=100)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=dm["Jour"],
+        y=y,
+        mode="lines",
+        name="Top 5",
+        line=dict(color=BVC_GOLD, width=2.2),
+        fill="tozeroy",
+        fillcolor="rgba(200,168,75,0.14)",
+    ))
+    mu = float(y.mean()) if y.notna().any() else np.nan
+    if pd.notna(mu):
+        fig.add_hline(
+            y=mu,
+            line_dash="dot",
+            line_color="#666",
+            annotation_text=f"Moyenne période : {mu:.1f}%",
+        )
+    fig.update_layout(
+        title="Concentration : top 5 instruments (% du volume total de la séance)",
+        height=340,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        showlegend=False,
+        margin=dict(l=20, r=20, t=48, b=20),
+        yaxis=dict(range=[0, 100], ticksuffix="%", title="% du volume jour"),
+    )
+    return fig
+
+
+def market_has_segment_volumes(df: pd.DataFrame) -> bool:
+    """True si le DataFrame marché contient les colonnes de volume par segment."""
+    return all(c in df.columns for c in SEGMENT_VOLUME_COLUMNS)
+
+
+def chart_volume_by_segment_stacked(df_market: pd.DataFrame) -> go.Figure:
+    """Histogrammes empilés : volume MAD par segment (actions, OPCVM, obligations, autre)."""
+    if not market_has_segment_volumes(df_market):
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Volumes par segment indisponibles (régénérer les Parquet ou vérifier la feuille Cours).",
+            xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False, font=dict(size=14),
+        )
+        fig.update_layout(height=320, plot_bgcolor="white")
+        return fig
+
+    dm = df_market.copy()
+    dm["Jour"] = pd.to_datetime(dm["Jour"])
+    labels = {
+        "Volume_MAD_Actions": "Actions",
+        "Volume_MAD_OPCVM": "OPCVM",
+        "Volume_MAD_Obligations": "Obligations",
+        "Volume_MAD_Autre": "Autre",
+    }
+    colors = [BVC_BLUE, "#2E7D32", "#F57C00", "#9E9E9E"]
+    fig = go.Figure()
+    for i, col in enumerate(SEGMENT_VOLUME_COLUMNS):
+        fig.add_trace(go.Bar(
+            x=dm["Jour"],
+            y=dm[col].fillna(0) / 1e6,
+            name=labels.get(col, col),
+            marker_color=colors[i % len(colors)],
+            opacity=0.88,
+        ))
+    fig.update_layout(
+        title="Volume journalier par segment (M MAD — empilé)",
+        barmode="stack",
+        height=380,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        legend=dict(orientation="h", y=1.02),
+        margin=dict(l=20, r=20, t=50, b=20),
+        yaxis_title="Volume (M MAD)",
+    )
+    return fig
+
+
+def chart_volume_segment_share_pct(df_market: pd.DataFrame) -> go.Figure:
+    """Répartition journalière du volume entre segments (% de la somme des segments)."""
+    if not market_has_segment_volumes(df_market):
+        fig = go.Figure()
+        fig.update_layout(height=280, plot_bgcolor="white")
+        return fig
+
+    dm = df_market.copy()
+    dm["Jour"] = pd.to_datetime(dm["Jour"])
+    tot = dm[list(SEGMENT_VOLUME_COLUMNS)].sum(axis=1).replace(0, np.nan)
+    labels = {
+        "Volume_MAD_Actions": "Actions",
+        "Volume_MAD_OPCVM": "OPCVM",
+        "Volume_MAD_Obligations": "Obligations",
+        "Volume_MAD_Autre": "Autre",
+    }
+    colors = [BVC_BLUE, "#2E7D32", "#F57C00", "#9E9E9E"]
+    fig = go.Figure()
+    for i, col in enumerate(SEGMENT_VOLUME_COLUMNS):
+        pct = np.where(tot.notna(), dm[col].fillna(0) / tot * 100.0, 0.0)
+        fig.add_trace(go.Bar(
+            x=dm["Jour"],
+            y=pct,
+            name=labels.get(col, col),
+            marker_color=colors[i % len(colors)],
+            opacity=0.88,
+        ))
+    fig.update_layout(
+        title="Part du volume par segment (% de la somme des segments — quotidien)",
+        barmode="stack",
+        height=360,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        legend=dict(orientation="h", y=1.02),
+        margin=dict(l=20, r=20, t=50, b=20),
+        yaxis=dict(range=[0, 100], ticksuffix="%"),
     )
     return fig
 

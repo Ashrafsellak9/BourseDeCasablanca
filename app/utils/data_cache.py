@@ -25,6 +25,7 @@ from src.indicators import (
     compute_instrument_indicators,
     compute_orderflow_indicators,
     compute_alert_scores,
+    daily_top5_volume_concentration,
 )
 from src.anomaly_detector import (
     detect_market_anomalies,
@@ -35,6 +36,10 @@ from src.anomaly_detector import (
     summarize_anomalies,
 )
 from src.market_stress import enrich_market_stress_score
+from src.instrument_segment import (
+    SEGMENT_VOLUME_COLUMNS,
+    enrich_market_with_segment_volumes,
+)
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
 
@@ -44,13 +49,32 @@ def load_base_data():
     """Charge les DataFrames depuis Parquet et enrichit le marché (Market Stress Score)."""
     market = pd.read_parquet(DATA_DIR / "market_indicators.parquet")
     orderflow = pd.read_parquet(DATA_DIR / "orderflow_indicators.parquet")
+    instrument = pd.read_parquet(DATA_DIR / "instrument_indicators.parquet")
     if not market.empty:
         market = enrich_market_stress_score(
             market, orderflow if not orderflow.empty else None
         )
+    if (
+        not market.empty
+        and not instrument.empty
+        and "Volume_MAD" in instrument.columns
+        and not all(c in market.columns for c in SEGMENT_VOLUME_COLUMNS)
+    ):
+        market = enrich_market_with_segment_volumes(market, instrument, DATA_DIR)
+    if (
+        not market.empty
+        and not instrument.empty
+        and "Volume_MAD" in instrument.columns
+        and "Volume_Top5_Pct" not in market.columns
+    ):
+        market = market.merge(
+            daily_top5_volume_concentration(instrument),
+            on="Jour",
+            how="left",
+        )
     return {
         "market":     market,
-        "instrument": pd.read_parquet(DATA_DIR / "instrument_indicators.parquet"),
+        "instrument": instrument,
         "orderflow":  orderflow,
         "alerts":     pd.read_parquet(DATA_DIR / "alert_scores.parquet"),
         "anomalies":  pd.read_parquet(DATA_DIR / "all_anomalies.parquet"),

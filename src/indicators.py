@@ -14,6 +14,12 @@ import pandas as pd
 import numpy as np
 from scipy import stats
 import warnings
+
+from src.instrument_segment import (
+    assign_instrument_segment,
+    enrich_market_with_segment_volumes,
+)
+
 warnings.filterwarnings('ignore')
 
 
@@ -87,8 +93,19 @@ def compute_market_indicators(
                .reset_index(name='HHI_Volume'))
         df = df.merge(hhi, on='Jour', how='left')
 
+    # --- Concentration : part du volume détenue par les 5 plus gros titres (feuille Cours) ---
+    if not df_cours.empty and "Volume_MAD" in df_cours.columns:
+        df = df.merge(daily_top5_volume_concentration(df_cours), on="Jour", how="left")
+
+    # --- Volume par segment (actions / OPCVM / obligations) depuis la feuille Cours ---
+    if not df_cours.empty and 'Volume_MAD' in df_cours.columns and 'Ticker' in df_cours.columns:
+        df = enrich_market_with_segment_volumes(df, df_cours)
+
     # --- Z-scores journaliers ---
-    for col in ['Volume_MAD', 'MASI_Return_pct', 'MASI_Vol_20j', 'Volume_Relatif_Marche']:
+    _zcols = ['Volume_MAD', 'MASI_Return_pct', 'MASI_Vol_20j', 'Volume_Relatif_Marche']
+    if 'Volume_Top5_Pct' in df.columns:
+        _zcols.append('Volume_Top5_Pct')
+    for col in _zcols:
         if col in df.columns:
             df[f'Z_{col}'] = _zscore_series(df[col])
 
@@ -104,6 +121,33 @@ def _hhi_volume(grp: pd.DataFrame) -> float:
         return np.nan
     shares = vol / total
     return (shares ** 2).sum()
+
+
+def _top5_volume_share_pct(grp: pd.DataFrame) -> float:
+    """Part du volume du jour détenue par les 5 instruments les plus actifs (0–100)."""
+    vol = grp["Volume_MAD"].fillna(0)
+    total = float(vol.sum())
+    if total <= 0:
+        return np.nan
+    return float(vol.nlargest(5).sum() / total * 100.0)
+
+
+def daily_top5_volume_concentration(df_cours: pd.DataFrame) -> pd.DataFrame:
+    """
+    Pour chaque séance : % du volume total représenté par les 5 plus gros volumes instrument.
+
+    Colonnes retournées : ``Jour``, ``Volume_Top5_Pct``.
+    """
+    if df_cours.empty or "Volume_MAD" not in df_cours.columns or "Jour" not in df_cours.columns:
+        return pd.DataFrame(columns=["Jour", "Volume_Top5_Pct"])
+    d = df_cours.copy()
+    d["Jour"] = pd.to_datetime(d["Jour"])
+    conc = (
+        d.groupby("Jour", observed=True)
+        .apply(_top5_volume_share_pct)
+        .reset_index(name="Volume_Top5_Pct")
+    )
+    return conc
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -126,6 +170,8 @@ def compute_instrument_indicators(df_cours: pd.DataFrame) -> pd.DataFrame:
     """
     df = df_cours.copy()
     df = df.sort_values(['Ticker', 'Jour']).reset_index(drop=True)
+
+    df = assign_instrument_segment(df)
 
     # --- Rendement journalier ---
     df['Rendement_pct'] = df.groupby('Ticker')['Cours_Cloture'].pct_change() * 100

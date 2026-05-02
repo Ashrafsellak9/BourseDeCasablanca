@@ -58,6 +58,10 @@ with st.sidebar:
     st.header("🔧 Sélection")
     sel = st.selectbox("Instrument", options, index=sel_index, key="sidebar_instrument_select")
     ticker = sel.split(' — ')[0].strip()
+    if "Segment" in df_instr.columns:
+        _seg = df_instr.loc[df_instr["Ticker"] == ticker, "Segment"].dropna()
+        if len(_seg):
+            st.caption(f"Segment marché : **{_seg.iloc[-1]}**")
 
     date_min = df_instr['Jour'].min().date()
     date_max = df_instr['Jour'].max().date()

@@ -31,9 +31,13 @@ from app.utils.data_cache import load_base_data
 from app.utils.charts import (
     chart_masi,
     chart_volume_marche,
+    chart_volume_top5_concentration,
+    chart_volume_by_segment_stacked,
+    chart_volume_segment_share_pct,
     chart_market_stress,
     chart_market_quality_mini,
     gauge_market_stress,
+    market_has_segment_volumes,
     BVC_BLUE,
     BVC_GOLD,
 )
@@ -43,6 +47,8 @@ from app.utils.streamlit_nav import get_query_param
 data       = load_base_data()
 df_market  = data['market'].copy()
 df_market['Jour'] = pd.to_datetime(df_market['Jour'])
+df_instr   = data['instrument'].copy()
+df_instr['Jour'] = pd.to_datetime(df_instr['Jour'])
 
 # ── Filtres sidebar ───────────────────────────────────────────────────────
 date_min = df_market['Jour'].min().date()
@@ -157,6 +163,77 @@ with tab1:
 with tab2:
     st.plotly_chart(chart_volume_marche(df_f), use_container_width=True, key="chart_vol_marche_tab2")
 
+    st.markdown(
+        "**Concentration du volume (top 5)** — chaque jour : somme des volumes des **5 instruments** "
+        "les plus actifs ÷ volume total de tous les titres de la feuille **Cours** (×100)."
+    )
+    if "Volume_Top5_Pct" in df_f.columns and len(df_f) > 0:
+        last_row = df_f.sort_values("Jour").iloc[-1]
+        xpct = float(last_row["Volume_Top5_Pct"]) if pd.notna(last_row.get("Volume_Top5_Pct")) else None
+        c_top_a, c_top_b = st.columns([1, 2.2])
+        with c_top_a:
+            if xpct is not None:
+                st.metric(
+                    "Top 5 = part du volume",
+                    f"{xpct:.1f} %",
+                    help="Dernière séance de la période affichée : % du volume journalier cumulé des 5 plus gros titres.",
+                )
+            else:
+                st.caption("Indicateur non disponible pour la dernière séance.")
+        with c_top_b:
+            st.plotly_chart(
+                chart_volume_top5_concentration(df_f),
+                use_container_width=True,
+                key="chart_vol_top5_conc_tab2",
+            )
+        ld = pd.to_datetime(last_row["Jour"]).normalize()
+        top5 = (
+            df_instr.loc[pd.to_datetime(df_instr["Jour"]).dt.normalize() == ld]
+            .nlargest(5, "Volume_MAD", keep="first")[
+                [c for c in ["Ticker", "Libelle", "Volume_MAD"] if c in df_instr.columns]
+            ]
+            .copy()
+        )
+        if not top5.empty and "Volume_MAD" in top5.columns:
+            top5["Volume (M MAD)"] = (top5["Volume_MAD"] / 1e6).round(2)
+            show_cols = ["Ticker", "Libelle", "Volume (M MAD)"] if "Libelle" in top5.columns else ["Ticker", "Volume (M MAD)"]
+            st.caption("Les 5 titres concernés (dernière séance de la période) :")
+            st.dataframe(
+                top5[show_cols].reset_index(drop=True),
+                use_container_width=True,
+                hide_index=True,
+                height=180,
+            )
+    else:
+        st.info("Concentration top 5 non disponible (données Cours / instruments manquantes).")
+
+    st.markdown(
+        "**Volume par segment** — agrégation des volumes de la feuille **Cours** "
+        "(actions / OPCVM / obligations / autre). Classification par mots-clés dans le libellé, "
+        "surcharge possible via `data/ref/ticker_segment.csv` (colonnes `Ticker`, `Segment`)."
+    )
+    c_seg_a, c_seg_b = st.columns(2)
+    with c_seg_a:
+        st.plotly_chart(
+            chart_volume_by_segment_stacked(df_f),
+            use_container_width=True,
+            key="chart_vol_segment_stack_tab2",
+        )
+    with c_seg_b:
+        st.plotly_chart(
+            chart_volume_segment_share_pct(df_f),
+            use_container_width=True,
+            key="chart_vol_segment_pct_tab2",
+        )
+    if market_has_segment_volumes(df_f) and "Volume_Segments_vs_Marche_pct" in df_f.columns:
+        last_cov = df_f.sort_values("Jour").iloc[-1]
+        v = last_cov.get("Volume_Segments_vs_Marche_pct")
+        if pd.notna(v):
+            st.caption(
+                f"Dernière séance : somme des segments = **{float(v):.1f}%** du volume global (feuille Indicateurs). "
+                "Un écart est normal si certains titres ne sont pas dans la feuille Cours."
+            )
+
     # Volume par mois
     df_f['Mois'] = df_f['Jour'].dt.month
     df_f['Mois_label'] = df_f['Jour'].dt.strftime('%b %Y')
@@ -268,13 +345,40 @@ with tab4:
 with tab5:
     display_cols = [c for c in [
         'Jour', 'MASI', 'MSI20', 'MASI_Return_pct', 'MASI_Vol_20j',
-        'Volume_MAD', 'Volume_Relatif_Marche', 'Breadth_pct', 'HHI_Volume',
+        'Volume_MAD', 'Volume_Top5_Pct', 'Z_Volume_Top5_Pct', 'Volume_MAD_Actions', 'Volume_MAD_OPCVM', 'Volume_MAD_Obligations', 'Volume_MAD_Autre',
+        'Volume_Somme_Segments', 'Volume_Segments_vs_Marche_pct',
+        'Volume_Relatif_Marche', 'Breadth_pct', 'HHI_Volume',
         'Market_Stress_Score', 'Market_Quality_Score', 'Stress_Vol', 'Stress_Breadth', 'Stress_OIR',
         'OIR_Marche_MeanAbs', 'Market_Stress_Regime',
     ] if c in df_f.columns]
     df_show = df_f[display_cols].sort_values('Jour', ascending=False).reset_index(drop=True)
     df_show['Volume_MAD'] = (df_show['Volume_MAD'] / 1e6).round(2)
-    st.dataframe(df_show.rename(columns={'Volume_MAD':'Volume (M MAD)'}),
+    for _vc in (
+        'Volume_MAD_Actions', 'Volume_MAD_OPCVM', 'Volume_MAD_Obligations', 'Volume_MAD_Autre',
+        'Volume_Somme_Segments',
+    ):
+        if _vc in df_show.columns:
+            df_show[_vc] = (df_show[_vc] / 1e6).round(2)
+    if 'Volume_Segments_vs_Marche_pct' in df_show.columns:
+        df_show['Volume_Segments_vs_Marche_pct'] = df_show['Volume_Segments_vs_Marche_pct'].round(1)
+    if 'Volume_Top5_Pct' in df_show.columns:
+        df_show['Volume_Top5_Pct'] = df_show['Volume_Top5_Pct'].round(1)
+    if 'Z_Volume_Top5_Pct' in df_show.columns:
+        df_show['Z_Volume_Top5_Pct'] = df_show['Z_Volume_Top5_Pct'].round(2)
+    _rename = {'Volume_MAD': 'Volume (M MAD)', 'Volume_Top5_Pct': 'Top 5 / vol. jour %', 'Z_Volume_Top5_Pct': 'Z-score Top5 %'}
+    _seg_labels = {
+        'Volume_MAD_Actions': 'Vol. Actions (M MAD)',
+        'Volume_MAD_OPCVM': 'Vol. OPCVM (M MAD)',
+        'Volume_MAD_Obligations': 'Vol. Obligations (M MAD)',
+        'Volume_MAD_Autre': 'Vol. Autre (M MAD)',
+        'Volume_Somme_Segments': 'Somme segments (M MAD)',
+    }
+    for _vc, _lab in _seg_labels.items():
+        if _vc in df_show.columns:
+            _rename[_vc] = _lab
+    if 'Volume_Segments_vs_Marche_pct' in df_show.columns:
+        _rename['Volume_Segments_vs_Marche_pct'] = 'Segments / vol. marché %'
+    st.dataframe(df_show.rename(columns=_rename),
                  use_container_width=True, height=400)
 
     col_dl1, col_dl2 = st.columns([1,3])
