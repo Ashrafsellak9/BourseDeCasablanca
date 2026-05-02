@@ -1,0 +1,122 @@
+% Fichier inclus par Rapport_PFE_BVC.tex
+% Détail mathématique A--Z (aligné sur l'implémentation du projet)
+
+\section{Détail des formules implémentées (référence)}
+\label{sec:formules_detail}
+
+\subsection{Statistiques descriptives}
+\begin{equation}
+\bar{x} = \frac{1}{n}\sum_{i=1}^{n} x_i,
+\qquad
+s = \sqrt{\frac{1}{n-1}\sum_{i=1}^{n}(x_i-\bar{x})^2}.
+\end{equation}
+
+\subsection{Marché global}
+Rendement MASI, volatilité rolling $\sigma^{\mathrm{MASI}}_{t,w}$, volume relatif $\mathrm{VolRel}_t = V_t/\overline{V}^{(20)}_t$, breadth et HHI comme dans le mémoire, section méthodologie.
+
+\subsection{Z-score (série globale)}
+\begin{equation}
+Z_t = \frac{x_t-\mu}{\sigma}, \qquad \sigma>0.
+\end{equation}
+
+\subsection{Instrument : rendement, range, spread}
+\begin{align}
+r_{i,t} &= \frac{C_{i,t}-C_{i,t-1}}{C_{i,t-1}}\times 100,\\
+\mathrm{Range}_{i,t} &= \frac{H_{i,t}-B_{i,t}}{C^{\mathrm{ref}}_{i,t}}\times 100,\\
+\mathrm{Spread}_{i,t} &= \frac{\left|O^{\mathrm{best}}_{i,t}-D^{\mathrm{best}}_{i,t}\right|}{C^{\mathrm{ref}}_{i,t}}\times 100.
+\end{align}
+
+\subsection{RSI (14)}
+\begin{equation}
+\mathrm{RS}_{i,t} = \frac{\overline{G}_{i,t}}{\overline{L}_{i,t}},
+\qquad
+\mathrm{RSI}_{i,t} = 100 - \frac{100}{1+\mathrm{RS}_{i,t}}.
+\end{equation}
+
+\subsection{Score de liquidité (par jour)}
+\begin{equation}
+\mathrm{LiqScore}_{i,t}
+=
+0{,}4\,\mathrm{rk}(\mathrm{Turnover})
++
+0{,}4\,\mathrm{rk}(\mathrm{VolRel})
++
+0{,}2\,\bigl(1-\mathrm{rk}(\mathrm{Spread})\bigr).
+\end{equation}
+
+\subsection{Flux d'ordres : OIR et OAR}
+\begin{equation}
+\mathrm{OIR}_{i,t}=\frac{B_{i,t}-S_{i,t}}{B_{i,t}+S_{i,t}},
+\qquad
+\mathrm{OAR}_{i,t}=\frac{N_{i,t}}{T^{\mathrm{actif}}_{i,t}}\times 60.
+\end{equation}
+
+\subsection{VWAP (définition financière de référence)}
+\begin{equation}
+\mathrm{VWAP}_{i,t}=\frac{\sum_{\tau} p_\tau q_\tau}{\sum_{\tau} q_\tau}.
+\end{equation}
+
+\subsection{Score d'alerte composite}
+\begin{equation}
+S^{\mathrm{alerte}}_{i,t}
+=
+100\Bigl(
+0{,}25 A^{r}+0{,}25 A^{V}+0{,}20 A^{\sigma}+0{,}15 A^{\mathrm{OIR}}+0{,}15 A^{\mathrm{OAR}}
+\Bigr).
+\end{equation}
+
+\subsection{IQR (Tukey)}
+Avec $\mathrm{IQR}=Q_3-Q_1$ :
+\begin{align}
+\text{Modéré} &: x \notin [Q_1-1{,}5\,\mathrm{IQR},\, Q_3+1{,}5\,\mathrm{IQR}],\\
+\text{Critique} &: x \notin [Q_1-3\,\mathrm{IQR},\, Q_3+3\,\mathrm{IQR}].
+\end{align}
+
+\subsection{Bandes de Bollinger}
+\begin{equation}
+\mathrm{BB}^{\pm}_{t}(k)=\mu_t \pm k\sigma_t.
+\end{equation}
+
+\subsection{CUSUM}
+\begin{align}
+C^{+}_t &= \max\bigl(0,\; C^{+}_{t-1}+z_t-k\bigr),\\
+C^{-}_t &= \max\bigl(0,\; C^{-}_{t-1}-z_t-k\bigr),
+\qquad z_t=\frac{x_t-\mu}{\sigma}.
+\end{align}
+
+\subsection{Consensus multi-méthodes}
+\begin{equation}
+\mathrm{CS}_t=\frac{1}{M}\sum_{m=1}^{M}s_{t,m}.
+\end{equation}
+
+\subsection{Normalisation des features (ML)}
+\begin{equation}
+\tilde{x}_{ij}=\frac{x_{ij}-\mu_j}{\sigma_j}.
+\end{equation}
+
+\subsection{Isolation Forest : normalisation du score}
+\begin{equation}
+\mathrm{IF}(\mathbf{x})=1-\frac{s(\mathbf{x})-s_{\min}}{s_{\max}-s_{\min}+\varepsilon}.
+\end{equation}
+
+\subsection{Autoencodeur : MSE et erreur par observation}
+\begin{align}
+\mathcal{L}(\theta) &= \frac{1}{n}\sum_{i=1}^{n}\|\mathbf{x}_i-f_\theta(\mathbf{x}_i)\|_2^2,\\
+e_i &= \frac{1}{d}\sum_{j=1}^{d}(x_{ij}-\hat{x}_{ij})^2.
+\end{align}
+
+\subsection{Score ML combiné et sévérité}
+\begin{equation}
+\mathrm{MLScore}_i
+=
+0{,}6\,(100\,\mathrm{IF}_i)+0{,}4\,(100\,\mathrm{AE}^{\mathrm{norm}}_i).
+\end{equation}
+\begin{equation}
+\text{Sévérité}=
+\begin{cases}
+\text{Critique}, & \mathrm{MLScore}\ge 80,\\
+\text{Modéré},   & 60\le \mathrm{MLScore}<80,\\
+\text{Faible},   & 40\le \mathrm{MLScore}<60,\\
+\text{Normal},   & \mathrm{MLScore}<40.
+\end{cases}
+\end{equation}

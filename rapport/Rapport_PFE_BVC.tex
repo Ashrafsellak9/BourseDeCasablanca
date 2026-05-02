@@ -1,0 +1,474 @@
+%==============================================================================
+%  RAPPORT DE PROJET DE FIN D'ÉTUDES (PFE)
+%  Système intelligent de surveillance de marché — Bourse de Casablanca
+%  Compilation recommandée : pdflatex (2 passes) depuis le dossier rapport/
+%  Prérequis : figures PNG dans ../reports/ (chemins relatifs)
+%==============================================================================
+\documentclass[a4paper,12pt,twoside,openright]{report}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+
+\usepackage{setspace}
+\onehalfspacing
+
+\usepackage{graphicx}
+\graphicspath{{../reports/}}
+
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\captionsetup{font=small,labelfont=bf}
+
+\usepackage{enumitem}
+\setlist{nosep,leftmargin=*}
+
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  citecolor=blue!60!black,
+  urlcolor=blue!60!black,
+  pdftitle={PFE Surveillance intelligente BVC},
+  pdfauthor={Achraf Sellak}
+}
+\usepackage[nameinlink,capitalize]{cleveref}
+
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  tabsize=2
+}
+
+% Chemin relatif depuis ce .tex (dossier rapport/) ; fichiers dans ../reports/
+\newcommand{\fig}[2][]{\includegraphics[#1]{#2}}
+
+%==============================================================================
+\begin{document}
+
+% --- Page de garde -----------------------------------------------------------
+\begin{titlepage}
+  \centering
+  \vspace*{1.5cm}
+  {\Large\textbf{Établissement d'enseignement supérieur}}\\[0.3cm]
+  {\large Filière / Département}\\[2cm]
+
+  \rule{\textwidth}{1.5pt}\\[0.6cm]
+  {\LARGE\textbf{Conception et implémentation d'un système informatique}}\\[0.25cm]
+  {\LARGE\textbf{de surveillance intelligente du marché}}\\[0.25cm]
+  {\Large\textbf{basé sur l'analyse des flux d'ordres}}\\[0.4cm]
+  \rule{\textwidth}{1.5pt}
+
+  \vfill
+  {\large\textbf{Projet de fin d'études (PFE)}}\\[1.5cm]
+
+  {\large Réalisé par :}\\[0.2cm]
+  {\LARGE Achraf Sellak}\\[1.2cm]
+
+  {\large Encadrant académique :}\\[0.2cm]
+  {\large \textit{(Nom, grade, établissement)}}\\[0.8cm]
+
+  {\large Encadrant entreprise :}\\[0.2cm]
+  {\large \textit{Bourse de Casablanca}}\\[1.5cm]
+
+  {\large Année universitaire : 2025--2026}
+
+  \vspace*{1.2cm}
+\end{titlepage}
+
+\cleardoublepage
+\pagenumbering{roman}
+
+\chapter*{Dédicaces}
+\addcontentsline{toc}{chapter}{Dédicaces}
+\textit{(À compléter.)}
+
+\chapter*{Remerciements}
+\addcontentsline{toc}{chapter}{Remerciements}
+Je remercie chaleureusement l'équipe de la Bourse de Casablanca pour l'accueil, la disponibilité et la transmission du savoir-faire métier. Je remercie également mon encadrant(e) académique pour le suivi, les relectures et les orientations méthodologiques.
+
+\chapter*{Résumé}
+\addcontentsline{toc}{chapter}{Résumé}
+Ce mémoire présente la conception et la réalisation d'un système intelligent de surveillance du marché financier, dans le cadre d'un stage à la Bourse de Casablanca. Le travail exploite des données historiques 2025 (indices, cours, volumes, transactions intraday) afin de calculer des indicateurs multi-niveaux (marché global, instrument, flux d'ordres), de détecter des anomalies par des méthodes statistiques robustes, puis d'enrichir l'analyse par des modèles de Machine Learning non supervisés (Isolation Forest et Autoencoder). Les résultats sont restitués via un tableau de bord interactif développé avec Streamlit, incluant une fonctionnalité d'import de nouveaux fichiers Excel au format attendu pour un recalcul automatique. Les apports, limites et perspectives (temps réel, industrialisation) sont discutés.
+
+\vspace{0.8cm}
+\noindent\textbf{Mots-clés :} surveillance de marché, flux d'ordres, anomalies, Z-score, IQR, Isolation Forest, Autoencoder, Streamlit, Bourse de Casablanca.
+
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+\textit{(English abstract to be completed.)}
+
+\tableofcontents
+\listoffigures
+\listoftables
+
+\cleardoublepage
+\pagenumbering{arabic}
+
+%==============================================================================
+\chapter{Introduction générale}
+\label{chap:intro}
+
+\section{Contexte et motivation}
+Les places boursières sont amenées à surveiller en continu l'activité de marché afin de préserver l'intégrité des transactions, d'identifier des comportements atypiques et de soutenir la décision opérationnelle. La Bourse de Casablanca dispose de données riches (agrégées et intraday) qui permettent d'observer simultanément la dynamique macro du marché et la microstructure par titre.
+
+\section{Problématique}
+La problématique centrale est la suivante : \textit{comment transformer des données brutes hétérogènes en signaux de surveillance fiables, interprétables et actionnables, tout en permettant une réutilisation sur de nouveaux jeux de données ?}
+
+\section{Objectifs du projet}
+Les objectifs principaux sont :
+\begin{itemize}
+  \item structurer et nettoyer les données historiques 2025 ;
+  \item calculer des indicateurs de surveillance à trois niveaux (marché, instrument, flux d'ordres) ;
+  \item détecter des anomalies via des seuils statistiques et une agrégation multi-méthodes ;
+  \item compléter par des approches de Machine Learning non supervisé (Isolation Forest, Autoencoder) ;
+  \item proposer un tableau de bord interactif (Streamlit) et un mécanisme d'upload Excel rejouant la chaîne de traitement.
+\end{itemize}
+
+\section{Démarche et organisation du document}
+Le travail est organisé en phases successives : exploration, indicateurs, détection statistique, interface, puis Machine Learning. Le \cref{chap:etat_art} présente les concepts. Le \cref{chap:donnees} détaille les données. Le \cref{chap:methodo} expose la méthodologie mathématique. Le \cref{chap:real} décrit la réalisation logicielle. Le \cref{chap:resultats} analyse les résultats. Le \cref{chap:concl} conclut et ouvre les perspectives.
+
+%==============================================================================
+\chapter{Cadre institutionnel et analyse des besoins}
+\label{chap:cadre}
+
+\section{Présentation de la Bourse de Casablanca}
+\textit{(À compléter : missions, place dans le système financier marocain, rôle de la surveillance.)}
+
+\section{Besoins fonctionnels}
+\begin{itemize}
+  \item disposer d'une vision \textbf{marché} (indices, volumes agrégés, largeur de marché) ;
+  \item analyser chaque \textbf{instrument} (rendement, volatilité, liquidité, spread) ;
+  \item exploiter le \textbf{flux d'ordres intraday} (déséquilibre, intensité des transactions, VWAP) ;
+  \item produire des \textbf{alertes} hiérarchisées (sévérité) ;
+  \item permettre l'\textbf{import} d'un nouveau fichier Excel de même structure.
+\end{itemize}
+
+\section{Besoins non fonctionnels}
+Performance de rechargement (cache Parquet), reproductibilité des calculs, modularité du code, ergonomie du dashboard, traçabilité des exports (CSV/Excel).
+
+\section{Contraintes}
+Données confidentielles, formats imposés par l'entreprise, absence de labels d'anomalies pour l'apprentissage supervisé, contraintes de temps de stage.
+
+%==============================================================================
+\chapter{État de l'art et concepts}
+\label{chap:etat_art}
+
+\section{Microstructure et surveillance}
+La microstructure étudie la formation des prix et la liquidité à partir des ordres et des transactions. Les indicateurs usuels incluent le spread, le volume, la volatilité réalisée et des mesures de déséquilibre (order imbalance).
+
+\section{Méthodes statistiques d'anomalies}
+Les approches classiques comprennent le Z-score, les percentiles, l'IQR (Tukey), les bandes de Bollinger et le CUSUM pour les ruptures de moyenne. Elles offrent une interprétabilité directe pour les équipes métier.
+
+\section{Machine Learning non supervisé}
+L'Isolation Forest isole les points atypiques par partitionnement aléatoire. L'autoencoder apprend une représentation compacte puis reconstruit l'entrée ; une erreur de reconstruction élevée suggère une anomalie. Ces méthodes complètent les seuils lorsque la relation entre variables est non linéaire.
+
+\section{Outils retenus}
+Python (pandas, numpy, scipy, scikit-learn, tensorflow), visualisation (matplotlib, seaborn, plotly), application web (Streamlit), stockage intermédiaire (Parquet).
+
+%==============================================================================
+\chapter{Données et préparation}
+\label{chap:donnees}
+
+\section{Source principale}
+Le fichier \texttt{DATASET-2025.xlsx} contient notamment les feuilles : Indicateurs, Indices, Cours, Intraday. Chaque feuille a été analysée pour identifier les clés temporelles (\texttt{Jour}), les identifiants de titre (\texttt{Ticker}) et les champs de prix/volume.
+
+\section{Nettoyage et normalisation}
+Le module \texttt{src/data\_loader.py} assure :
+\begin{itemize}
+  \item lecture insensible à la casse des noms de feuilles ;
+  \item suppression des colonnes non nommées ;
+  \item harmonisation des en-têtes ;
+  \item typage des dates et tri chronologique ;
+  \item validation de schéma pour l'upload.
+\end{itemize}
+
+\section{Mise en cache}
+Les jeux enrichis sont exportés en Parquet pour accélérer les notebooks et l'application.
+
+\begin{figure}[H]
+  \centering
+  \fig[width=0.92\textwidth]{03_correlation_matrix.png}
+  \caption{Exemple d'analyse exploratoire : matrice de corrélations entre variables (notebook d'exploration).}
+  \label{fig:corr}
+\end{figure}
+
+%==============================================================================
+\chapter{Méthodologie mathématique et algorithmique}
+\label{chap:methodo}
+
+\section{Indicateurs marché global}
+Soit $P_t$ le MASI et $V_t$ le volume agrégé. Le rendement journalier est
+\begin{equation}
+r^{\mathrm{MASI}}_t=\frac{P_t-P_{t-1}}{P_{t-1}}\times 100 .
+\end{equation}
+La volatilité rolling sur $w$ jours est l'écart-type des rendements sur la fenêtre. Le volume relatif marché compare $V_t$ à sa moyenne mobile sur 20 jours.
+
+La \textbf{breadth} mesure la fraction de titres en hausse le jour $t$. L'indice \textbf{HHI} mesure la concentration des volumes :
+\begin{equation}
+\mathrm{HHI}_t=\sum_i s_{i,t}^2, \qquad s_{i,t}=\frac{v_{i,t}}{\sum_j v_{j,t}} .
+\end{equation}
+
+\section{Indicateurs par instrument}
+Rendement, range, spread, volatilités rolling, volume relatif, turnover, RSI(14), momentum, score de liquidité composite (combinaison de rangs percentiles cross-sectionnels par jour).
+
+\section{Flux d'ordres intraday}
+Les transactions sont dédupliquées par identifiant. Une classification \emph{tick rule} (Lee-Ready simplifiée) détermine si la transaction est plutôt initiée côté achat ou vente selon la variation de prix transaction à transaction. L'Order Imbalance Ratio s'écrit
+\begin{equation}
+\mathrm{OIR}_{i,t}=\frac{B_{i,t}-S_{i,t}}{B_{i,t}+S_{i,t}},
+\end{equation}
+où $B_{i,t}$ et $S_{i,t}$ sont les volumes classés achat et vente. L'Order Arrival Rate mesure l'intensité des transactions par unité de temps de séance active.
+
+Le VWAP théorique est $\sum p q / \sum q$ ; une déviation par rapport au cours de clôture peut être rapportée au cours de référence.
+
+\section{Détection statistique multi-méthodes}
+Pour une série $(x_t)$, le Z-score statique utilise $\mu$ et $\sigma$ globaux ; le Z-score rolling compare $x_t$ à la moyenne et à l'écart-type d'une fenêtre glissante.
+
+Les percentiles tracent des seuils empiriques. L'IQR définit des bornes $Q_1-k\,\mathrm{IQR}$ et $Q_3+k\,\mathrm{IQR}$ avec $k\in\{1{,}5,3\}$ selon le niveau d'alerte.
+
+Les bandes de Bollinger utilisent $\mu_t\pm k\sigma_t$ avec $\mu_t,\sigma_t$ rolling.
+
+Le CUSUM cumule des écarts standardisés pour détecter des dérives de moyenne.
+
+\section{Consensus}
+Chaque méthode produit une sévérité ordonnée, convertie en score entier puis moyennée pour un \emph{score de consensus} et une sévérité finale.
+
+\section{Score d'alerte composite (pré-ML)}
+Une combinaison pondérée de signaux binaires (rendement, volume, volatilité, OIR, OAR) fournit un score sur $[0,100]$ et une sévérité discrétisée.
+
+\section{Machine Learning}
+\subsection{Prétraitement}
+Standardisation des features : $(x-\mu)/\sigma$ par colonne.
+
+\subsection{Isolation Forest}
+Entraînement avec contamination cible ; score sklearn renormalisé en score $[0,1]$ pour homogénéité avec l'autoencodeur.
+
+\subsection{Autoencoder}
+Minimisation de l'erreur quadratique moyenne de reconstruction ; seuil sur l'erreur moyenne par observation via un percentile lié à la contamination.
+
+\subsection{Score combiné}
+\begin{equation}
+\mathrm{ML}=0{,}6\times(100\,\mathrm{IF}_{\mathrm{norm}})+0{,}4\times(100\,\mathrm{AE}_{\mathrm{norm}}).
+\end{equation}
+Les seuils de sévérité finale ML sont appliqués sur ce score combiné.
+
+\input{chapitre_formules_detail.tex}
+
+%==============================================================================
+\chapter{Réalisation informatique (phase par phase)}
+\label{chap:real}
+
+\section{Architecture logicielle}
+\begin{itemize}
+  \item \texttt{src/} : modules Python réutilisables ;
+  \item \texttt{notebooks/} : exploration, calculs, figures ;
+  \item \texttt{data/} : données intermédiaires et résultats (Parquet, CSV) ;
+  \item \texttt{reports/} : figures et exports Excel ;
+  \item \texttt{models/} : modèles ML sérialisés ;
+  \item \texttt{app/} : application Streamlit multipages.
+\end{itemize}
+
+\section{Phase 1 --- Exploration}
+Notebook \texttt{01\_exploration.ipynb} : distributions, premières agrégations, contrôle qualité. Exemple de figure : corrélations (\cref{fig:corr}).
+
+\section{Phase 2 --- Indicateurs}
+Module \texttt{src/indicators.py}. Figures illustratives :
+\begin{figure}[H]
+  \centering
+  \fig[width=0.92\textwidth]{01_indicateurs_marche.png}
+  \caption{Indicateurs et dynamique au niveau marché (exemple issu des notebooks).}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \fig[width=0.92\textwidth]{02_volatilite_instruments.png}
+  \caption{Volatilités et dispersion entre instruments.}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \fig[width=0.92\textwidth]{06_profil_instrument_GTM.png}
+  \caption{Exemple de profil détaillé d'un instrument.}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \fig[width=0.92\textwidth]{08_orderflow_indicators.png}
+  \caption{Indicateurs de flux d'ordres agrégés (intraday).}
+\end{figure}
+
+\section{Phase 3 --- Détection statistique}
+Module \texttt{src/anomaly\_detector.py}. Export \texttt{anomalies\_statistiques\_2025.xlsx} pour validation métier.
+
+\begin{figure}[H]
+  \centering
+  \fig[width=0.92\textwidth]{12_detection_marche.png}
+  \caption{Détection d'anomalies au niveau marché.}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \fig[width=0.92\textwidth]{15_chronologie_anomalies.png}
+  \caption{Chronologie des anomalies détectées.}
+\end{figure}
+
+\section{Phase 4 --- Tableau de bord Streamlit}
+Répertoire \texttt{app/} : \texttt{app.py} (accueil), pages \texttt{1\_Marche\_Global.py}, \texttt{2\_Instruments.py}, \texttt{3\_Alertes.py}, \texttt{4\_Upload\_Excel.py}, \texttt{5\_Machine\_Learning.py}. Utilitaires \texttt{data\_cache.py} (cache \texttt{@st.cache\_data}) et \texttt{charts.py} (Plotly).
+
+Le fichier \texttt{run\_app.bat} lance Streamlit depuis l'environnement approprié.
+
+\section{Phase 5 --- Machine Learning}
+Module \texttt{src/ml\_models.py}, notebook \texttt{04\_machine\_learning.ipynb}, sauvegardes dans \texttt{models/}.
+
+\begin{figure}[H]
+  \centering
+  \fig[width=0.92\textwidth]{ml_01_distributions_marche.png}
+  \caption{Distributions des features marché avant modélisation ML.}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \fig[width=0.92\textwidth]{ml_02_if_scores_marche.png}
+  \caption{Scores Isolation Forest et sévérités associées (marché).}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \fig[width=0.92\textwidth]{ml_03_ae_reconstruction_marche.png}
+  \caption{Erreurs de reconstruction de l'autoencodeur (marché).}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \fig[width=0.92\textwidth]{ml_04_comparaison_stat_ml.png}
+  \caption{Comparaison entre approches statistiques et Machine Learning.}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \fig[width=0.92\textwidth]{ml_05_heatmap_ml_anomalies.png}
+  \caption{Heatmap des anomalies détectées par le pipeline ML.}
+\end{figure}
+
+\section{Pipeline d'upload}
+La fonction \texttt{process\_uploaded\_file} rejoue : chargement Excel, validation, calculs d'indicateurs, détection, puis affichage dans l'interface.
+
+%==============================================================================
+\chapter{Résultats et discussion}
+\label{chap:resultats}
+
+\section{Résultats sur les indicateurs}
+Les indicateurs permettent une lecture cohérente à trois niveaux : tendance et volatilité du MASI, profils par titre, et signaux intraday (OIR, OAR, VWAP).
+
+\section{Résultats de la détection statistique}
+La multiplicité des méthodes réduit le risque de sur-détection liée à un seul critère. Le consensus met en avant les situations où plusieurs tests concordent.
+
+\begin{figure}[H]
+  \centering
+  \fig[width=0.92\textwidth]{10_scores_alertes.png}
+  \caption{Distribution des scores d'alerte composites.}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \fig[width=0.92\textwidth]{11_heatmap_alertes_mensuelles.png}
+  \caption{Heatmap des alertes dans le temps.}
+\end{figure}
+
+\section{Résultats Machine Learning}
+Les modèles non supervisés mettent en évidence des observations aux combinaisons de features atypiques. La comparaison avec la phase statistique distingue : anomalies communes, anomalies spécifiques statistiques, anomalies spécifiques ML.
+
+\section{Limites}
+Données principalement historiques ; pas de boucle temps réel ; hyperparamètres à affiner avec retour métier ; évaluation qualitative faute de labels officiels.
+
+\section{Apports pour l'organisme d'accueil}
+Prototype opérationnel, base de code modulaire, exports exploitables, interface de démonstration pour échanges avec les équipes surveillance.
+
+%==============================================================================
+\chapter{Conclusion et perspectives}
+\label{chap:concl}
+
+\section{Bilan}
+Le projet a permis de mettre en œuvre une chaîne complète de surveillance intelligente : données $\rightarrow$ indicateurs $\rightarrow$ anomalies statistiques $\rightarrow$ Machine Learning $\rightarrow$ visualisation et import de nouveaux fichiers.
+
+\section{Perspectives}
+\begin{itemize}
+  \item intégration temps réel (streaming, bus de messages) ;
+  \item moteur d'alertes avec notifications ;
+  \item boucle de validation analyste et suivi des faux positifs ;
+  \item explainabilité avancée et calibration des seuils ;
+  \item déploiement conteneurisé (Docker) et CI/CD.
+\end{itemize}
+
+%==============================================================================
+\cleardoublepage
+\phantomsection
+\addcontentsline{toc}{chapter}{Bibliographie}
+\begin{thebibliography}{99}
+
+\bibitem{hasbrouck1991}
+J. Hasbrouck,
+\textit{Measuring the Information Content of Stock Trades},
+Journal of Finance, 1991.
+\textit{(Exemple de référence microstructure ; à adapter selon ta bibliographie réelle.)}
+
+\bibitem{sklearn}
+Pedregosa et al.,
+\textit{Scikit-learn: Machine Learning in Python},
+JMLR 12, pp. 2825--2830, 2011.
+
+\bibitem{tensorflow}
+M. Abadi et al.,
+\textit{TensorFlow: Large-Scale Machine Learning on Heterogeneous Systems}, 2015.
+
+\bibitem{streamlit}
+Streamlit Inc.,
+\textit{Streamlit Documentation},
+\url{https://docs.streamlit.io/}
+
+\end{thebibliography}
+
+%==============================================================================
+\appendix
+\chapter{Annexe A --- Arborescence du projet}
+\begin{lstlisting}
+BourseDeCasablancaPFE/
+  app/                 # Streamlit
+  data/                # Parquet, CSV, Excel
+  models/              # IF.pkl, autoencoder/
+  notebooks/           # 01_ ... 04_
+  reports/             # figures PNG, exports
+  src/                 # data_loader, indicators,
+                       # anomaly_detector, ml_models
+  rapport/             # ce document LaTeX
+\end{lstlisting}
+
+\chapter{Annexe B --- Compilation LaTeX}
+Depuis le dossier \texttt{rapport/} :
+\begin{lstlisting}
+pdflatex Rapport_PFE_BVC.tex
+pdflatex Rapport_PFE_BVC.tex
+\end{lstlisting}
+Vérifier que les fichiers PNG sont bien présents dans \texttt{../reports/}.
+
+\chapter{Annexe C --- Lancement de l'application}
+Exécuter \texttt{run\_app.bat} à la racine du projet ou :
+\begin{lstlisting}
+cd app
+streamlit run app.py
+\end{lstlisting}
+
+\end{document}
