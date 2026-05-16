@@ -1,0 +1,415 @@
+\documentclass[aspectratio=169,10pt]{beamer}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tikz}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usetikzlibrary{arrows.meta,positioning}
+
+\definecolor{bvcblue}{RGB}{11,61,97}
+\definecolor{bvcteal}{RGB}{0,137,145}
+\definecolor{bvcgold}{RGB}{205,151,48}
+\definecolor{bvcred}{RGB}{181,48,48}
+\definecolor{bvcgreen}{RGB}{39,132,92}
+\definecolor{lightbg}{RGB}{246,248,250}
+\definecolor{textgray}{RGB}{42,48,56}
+
+\setbeamercolor{normal text}{fg=textgray,bg=white}
+\setbeamercolor{structure}{fg=bvcblue}
+\setbeamercolor{frametitle}{fg=white,bg=bvcblue}
+\setbeamercolor{block title}{fg=white,bg=bvcblue}
+\setbeamercolor{block body}{fg=textgray,bg=lightbg}
+\setbeamercolor{alerted text}{fg=bvcred}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{itemize item}{\color{bvcteal}\small$\blacktriangleright$}
+\setbeamertemplate{enumerate item}{\color{bvcblue}\insertenumlabel.}
+\setbeamertemplate{footline}{
+  \leavevmode
+  \hbox{
+    \begin{beamercolorbox}[wd=.78\paperwidth,ht=2.4ex,dp=1ex,leftskip=1.2em]{author in head/foot}
+      \scriptsize Achraf Sellak -- Soutenance PFE -- Bourse de Casablanca
+    \end{beamercolorbox}
+    \begin{beamercolorbox}[wd=.22\paperwidth,ht=2.4ex,dp=1ex,rightskip=1.2em plus1fil]{date in head/foot}
+      \scriptsize \insertframenumber/14
+    \end{beamercolorbox}
+  }
+}
+
+\newcommand{\duration}[1]{\hfill{\scriptsize\color{bvcgold}#1}}
+\newcommand{\repofig}[2][]{\includegraphics[#1]{reports/#2}}
+\newcommand{\screenfig}[2][]{\includegraphics[#1]{soutenance/screens/#2}}
+\newcommand{\metric}[3]{%
+  \begin{block}{#1}
+    {\Large\bfseries #2}\par\vspace{0.15em}{\scriptsize #3}
+  \end{block}
+}
+
+\title{Conception et Implementation d'un Systeme de Surveillance du Marche}
+\subtitle{Base sur les donnees de microstructure -- Bourse de Casablanca}
+\author{Achraf Sellak}
+\date{2025--2026}
+
+\begin{document}
+
+% Slide 1
+\begin{frame}[plain]
+  \begin{tikzpicture}[remember picture,overlay]
+    \fill[bvcblue] (current page.south west) rectangle (current page.north east);
+    \fill[bvcteal] (current page.south west) rectangle ([xshift=1.1cm]current page.north west);
+    \fill[bvcgold] ([xshift=1.1cm]current page.south west) rectangle ([xshift=1.35cm]current page.north west);
+    \fill[white] ([xshift=0.95cm,yshift=-1.55cm]current page.north west) rectangle ([xshift=5.0cm,yshift=-0.35cm]current page.north west);
+    \fill[white] ([xshift=10.15cm,yshift=-1.55cm]current page.north west) rectangle ([xshift=15.55cm,yshift=-0.35cm]current page.north west);
+  \end{tikzpicture}
+  \includegraphics[width=3.65cm,height=1.0cm,keepaspectratio]{soutenance/ehtp_logo.png}
+  \hfill
+  \includegraphics[width=5.05cm,height=1.0cm,keepaspectratio]{soutenance/bvc_logo_user.png}
+  \vspace{0.75cm}
+  {\color{white}\LARGE\bfseries Conception et Implementation d'un Systeme de Surveillance du Marche\par}
+  \vspace{0.25cm}
+  {\color{white}\large Base sur les Donnees de Microstructure\par}
+  \vfill
+  {\color{white}\normalsize \textbf{Achraf Sellak} -- Filiere SIG\par}
+  \vspace{0.2cm}
+  {\color{white}\small Encadrant pedagogique : Pr. Hatim Lechguar\par}
+  {\color{white}\small Encadrante professionnelle : Mme. Fatima Zahra Raoui\par}
+  \vspace{0.45cm}
+  {\color{white}\small Projet de Fin d'Etudes -- 2025--2026\par}
+\end{frame}
+
+% Slide 2
+\begin{frame}{Plan de la presentation \duration{30 s}}
+  \begin{enumerate}
+    \item Contexte et problematique
+    \item Architecture et donnees
+    \item Indicateurs et detection statistique
+    \item Modeles ML non supervises
+    \item Resultats et demonstration
+    \item Conclusion et perspectives
+  \end{enumerate}
+  \vspace{0.8em}
+  \begin{block}{Fil conducteur}
+    Transformer des donnees de marche disponibles en signaux de surveillance interpretables et exploitables.
+  \end{block}
+\end{frame}
+
+% Slide 3
+\begin{frame}{1. Contexte et problematique \duration{2 min}}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.34\textwidth}
+      \metric{Seances analysees}{247}{Annee 2025}
+      \metric{Instruments}{80}{Titres presents dans le dataset}
+      \metric{Indice de reference}{MASI}{Lecture macro du marche}
+    \end{column}
+    \begin{column}{0.62\textwidth}
+      \begin{block}{Enjeux de la surveillance}
+        Preserver l'integrite du marche, identifier les ruptures de liquidite, detecter les volumes ou rendements atypiques et produire des alertes actionnables.
+      \end{block}
+      \begin{itemize}
+        \item Les regles statiques seules s'adaptent mal aux regimes de marche.
+        \item Les donnees de microstructure apportent un signal fin : transactions, volumes, OIR, OAR, VWAP.
+      \end{itemize}
+      \begin{block}{Problematique}
+        Comment detecter automatiquement les comportements atypiques a partir des donnees disponibles ?
+      \end{block}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% Slide 4
+\begin{frame}{2. Architecture batch \duration{1 min 30}}
+  \centering
+  \begin{tikzpicture}[
+      node distance=0.85cm,
+      box/.style={draw=bvcblue, fill=lightbg, rounded corners=2pt, minimum width=2.55cm, minimum height=0.9cm, align=center},
+      arrow/.style={-{Latex[length=2.2mm]}, thick, draw=bvcteal}
+    ]
+    \node[box] (excel) {Excel\\\scriptsize DATASET-2025.xlsx};
+    \node[box, right=of excel] (src) {Modules src/\\\scriptsize loader, indicateurs, detection};
+    \node[box, right=of src] (parquet) {Parquet / CSV\\\scriptsize cache et exports};
+    \node[box, right=of parquet] (streamlit) {Streamlit\\\scriptsize dashboard multipage};
+    \draw[arrow] (excel) -- (src);
+    \draw[arrow] (src) -- (parquet);
+    \draw[arrow] (parquet) -- (streamlit);
+  \end{tikzpicture}
+  \vspace{1em}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Traitement}
+        Lecture, validation, nettoyage, enrichissement et calcul automatique des indicateurs.
+      \end{block}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Restitution}
+        KPIs, graphiques, alertes, filtres, exports et page ML.
+      \end{block}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% Slide 5
+\begin{frame}{2. Donnees et stack technique \duration{1 min 30}}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.44\textwidth}
+      \begin{block}{Source principale}
+        \texttt{DATASET-2025.xlsx}
+      \end{block}
+      \begin{itemize}
+        \item \texttt{Cours}
+        \item \texttt{Indices}
+        \item \texttt{Indicateurs}
+        \item \texttt{Intraday}
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.54\textwidth}
+      \small
+      \begin{tabular}{ll}
+        \toprule
+        Outil & Usage \\
+        \midrule
+        Python, pandas, NumPy & Pipeline data \\
+        openpyxl, Parquet & Excel et cache \\
+        scipy, statsmodels & Detection statistique \\
+        scikit-learn & Isolation Forest \\
+        TensorFlow / Keras & Autoencoder \\
+        Streamlit, Plotly & Dashboard interactif \\
+        \bottomrule
+      \end{tabular}
+    \end{column}
+  \end{columns}
+  \vspace{0.7em}
+  \begin{block}{Choix d'architecture}
+    Un pipeline batch simple a auditer, reproductible et compatible avec les contraintes de donnees disponibles.
+  \end{block}
+\end{frame}
+
+% Slide 6
+\begin{frame}{3. Indicateurs calcules \duration{1 min 20}}
+  \small
+  \begin{tabular}{lll}
+    \toprule
+    Niveau & Indicateurs & Role \\
+    \midrule
+    Marche & volatilite, breadth, VaR, HHI & Etat global du marche \\
+    Instrument & rendement, RSI, spread, liquidite & Profil et risque par titre \\
+    Intraday & OIR, OAR, VWAP & Pression achat/vente et activite \\
+    \bottomrule
+  \end{tabular}
+  \vspace{0.8em}
+  \[
+    OIR_t=\frac{V^{buy}_t-V^{sell}_t}{V^{buy}_t+V^{sell}_t}
+    \qquad
+    VWAP_t=\frac{\sum_i P_iV_i}{\sum_i V_i}
+  \]
+  \[
+    VaR_{\alpha}=-Quantile_{1-\alpha}(r_t)
+  \]
+\end{frame}
+
+% Slide 7
+\begin{frame}{3. Score de stress de marche \duration{1 min 20}}
+  \begin{block}{Trois composantes}
+    Volatilite du MASI, deterioration de la breadth, desequilibre du flux d'ordres.
+  \end{block}
+  \[
+    S_{stress}=\frac{S_{vol}+S_{breadth}+S_{OIR}}{3}
+  \]
+  \[
+    S_{vol}=rang(\sigma_{MASI,20j})\times100,\quad
+    S_{breadth}=100-Breadth_t,\quad
+    S_{OIR}=rang(|OIR|_t)\times100
+  \]
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.48\textwidth}
+      \metric{Exemple de lecture}{72 / 100}{Marche sous tension elevee}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Interet}
+        Un seul score synthetise volatilite, largeur de marche et pression intraday.
+      \end{block}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% Slide 8
+\begin{frame}{3. Detection statistique \duration{1 min 20}}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.46\textwidth}
+      \begin{block}{6 familles de methodes}
+        Z-score, z-score rolling, IQR, percentiles, bandes de Bollinger, CUSUM.
+      \end{block}
+      \begin{itemize}
+        \item Chaque methode vote si l'observation est atypique.
+        \item Le consensus combine nombre de votes et intensite du signal.
+        \item Severite finale : Normal, Faible, Modere, Critique.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.50\textwidth}
+      \repofig[width=\textwidth,height=0.58\textheight,keepaspectratio]{12_detection_marche.png}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% Slide 9
+\begin{frame}{4. Modeles ML non supervises \duration{1 min 30}}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Isolation Forest}
+        Partitionnements aleatoires : une anomalie est isolee avec moins de coupes.
+        Contamination fixee a \textbf{0.05}. Score normalise dans $[0,1]$.
+      \end{block}
+      \begin{block}{Autoencoder}
+        Architecture dense \textbf{7--8--7}. Une forte erreur de reconstruction indique un profil inhabituel.
+      \end{block}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Score ML combine}
+        \[
+          Score_{ML}=0.6\,Score_{IF}+0.4\,Score_{AE}
+        \]
+      \end{block}
+      \repofig[width=\textwidth,height=0.38\textheight,keepaspectratio]{ml_02_if_scores_marche.png}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% Slide 10
+\begin{frame}{4. Pourquoi du ML non supervise ? \duration{1 min 30}}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.46\textwidth}
+      \begin{itemize}
+        \item Pas de labels metier exhaustifs pour entrainer un modele supervise.
+        \item Objectif : completer les regles statistiques, pas les remplacer.
+        \item Les seuils ML structurent la priorisation : 40, 60, 80.
+      \end{itemize}
+      \begin{block}{Severite ML}
+        Faible $\geq 40$ -- Modere $\geq 60$ -- Critique $\geq 80$
+      \end{block}
+    \end{column}
+    \begin{column}{0.50\textwidth}
+      \repofig[width=\textwidth,height=0.61\textheight,keepaspectratio]{ml_04_comparaison_stat_ml.png}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% Slide 11
+\begin{frame}{5. Resultats chiffres \duration{1 min 30}}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.24\textwidth}
+      \metric{Seances}{247}{Annee 2025}
+    \end{column}
+    \begin{column}{0.24\textwidth}
+      \metric{Instruments}{80}{Univers analyse}
+    \end{column}
+    \begin{column}{0.24\textwidth}
+      \metric{Anomalies}{18 797}{Toutes severites}
+    \end{column}
+    \begin{column}{0.24\textwidth}
+      \metric{Critiques}{1 839}{Alertes prioritaires}
+    \end{column}
+  \end{columns}
+  \vspace{0.65em}
+  \small
+  \begin{tabular}{lrr}
+    \toprule
+    Severite finale & Nombre & Part approx. \\
+    \midrule
+    Faible & 12 211 & 65,0\% \\
+    Modere & 4 747 & 25,3\% \\
+    Critique & 1 839 & 9,8\% \\
+    \bottomrule
+  \end{tabular}
+  \hfill
+  \begin{minipage}{0.31\textwidth}
+    \begin{block}{Couverture}
+      78 instruments alertes dans le jeu actuel.
+    \end{block}
+  \end{minipage}
+\end{frame}
+
+% Slide 12
+\begin{frame}{5. Demo Streamlit \duration{2 min}}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.49\textwidth}
+      \screenfig[width=\textwidth,height=0.25\textheight,keepaspectratio]{accueil.jpeg}
+      \scriptsize\textbf{Accueil :} KPIs 2025, score de stress global et evolution temporelle du risque.
+      \vspace{0.45em}
+
+      \screenfig[width=\textwidth,height=0.25\textheight,keepaspectratio]{alertes_heatmap.jpeg}
+      \scriptsize\textbf{Centre d'alertes :} filtres lateraux, heatmaps et priorisation par severite.
+    \end{column}
+    \begin{column}{0.49\textwidth}
+      \screenfig[width=\textwidth,height=0.25\textheight,keepaspectratio]{ml_global.jpeg}
+      \scriptsize\textbf{Detection ML :} score combine IF + AE, seuils et anomalies ML signalees.
+      \vspace{0.45em}
+
+      \screenfig[width=\textwidth,height=0.25\textheight,keepaspectratio]{instrument.jpeg}
+      \scriptsize\textbf{Instrument :} profil titre, volatilite, liquidite, RSI et flux d'ordres.
+    \end{column}
+  \end{columns}
+  \vspace{0.3em}
+  \centering\scriptsize Demo live : \texttt{streamlit run app/Accueil.py}
+\end{frame}
+
+% Slide 13
+\begin{frame}{5. Notifications critiques \duration{1 min 30}}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.47\textwidth}
+      \begin{itemize}
+        \item Envoi optionnel par e-mail et Slack.
+        \item Lecture de la configuration via \texttt{.env}.
+        \item Deduplication JSON pour eviter de renvoyer la meme alerte.
+        \item Historique consultable et tracable.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.49\textwidth}
+      \begin{block}{Exemple d'alerte critique}
+        \small
+        Titre : Instrument X\\
+        Regle : volume relatif + OIR extreme\\
+        Severite : Critique\\
+        Action : notification aux analystes + conservation dans les exports.
+      \end{block}
+      \screenfig[width=\textwidth,height=0.30\textheight,keepaspectratio]{alertes_heatmap.jpeg}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% Slide 14
+\begin{frame}{6. Conclusion et perspectives \duration{2 min}}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.49\textwidth}
+      \begin{block}{Synthese}
+        \begin{itemize}
+          \item Pipeline complet Excel vers Streamlit.
+          \item Indicateurs macro, micro et intraday.
+          \item Detection hybride : statistique + ML.
+          \item Alertes priorisees et exploitables.
+        \end{itemize}
+      \end{block}
+      \begin{block}{Limites}
+        Pas de labels metier exhaustifs ; architecture batch uniquement.
+      \end{block}
+    \end{column}
+    \begin{column}{0.49\textwidth}
+      \begin{block}{Perspectives}
+        \begin{itemize}
+          \item Etiquetage metier des alertes.
+          \item LSTM-Autoencoder pour les sequences.
+          \item API REST et integration SI.
+        \end{itemize}
+      \end{block}
+      \vspace{0.8em}
+      \centering
+      {\Large\bfseries Merci pour votre attention}\\[0.4em]
+      {\large Questions ?}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\end{document}

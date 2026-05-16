@@ -19,7 +19,7 @@
 \onehalfspacing
 
 \usepackage{graphicx}
-\graphicspath{{../reports/}}
+\graphicspath{{../reports/}{assets/}}
 
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{booktabs}
@@ -43,7 +43,6 @@
   pdftitle={PFE Surveillance intelligente BVC},
   pdfauthor={Achraf Sellak}
 }
-\usepackage[nameinlink,capitalize]{cleveref}
 
 \usepackage{listings}
 \lstset{
@@ -62,9 +61,19 @@
 % --- Page de garde -----------------------------------------------------------
 \begin{titlepage}
   \centering
-  \vspace*{1.5cm}
-  {\Large\textbf{Établissement d'enseignement supérieur}}\\[0.3cm]
-  {\large Filière / Département}\\[2cm]
+  \begin{minipage}{0.45\textwidth}
+    \raggedright
+    \includegraphics[width=0.78\linewidth]{logo_ehtp.png}
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.45\textwidth}
+    \raggedleft
+    \includegraphics[width=0.86\linewidth]{logo_bvc.png}
+  \end{minipage}
+
+  \vspace*{1.1cm}
+  {\Large\textbf{École Hassania des Travaux Publics}}\\[0.3cm]
+  {\large Filière Sciences de l'Information Géographique}\\[1.6cm]
 
   \rule{\textwidth}{1.5pt}\\[0.6cm]
   {\LARGE\textbf{Conception et implémentation d'un système informatique}}\\[0.25cm]
@@ -78,11 +87,11 @@
   {\large Réalisé par :}\\[0.2cm]
   {\LARGE Achraf Sellak}\\[1.2cm]
 
-  {\large Encadrant académique :}\\[0.2cm]
-  {\large \textit{(Nom, grade, établissement)}}\\[0.8cm]
+  {\large Encadrant pédagogique :}\\[0.2cm]
+  {\large Pr. Hatim Lechguar}\\[0.8cm]
 
-  {\large Encadrant entreprise :}\\[0.2cm]
-  {\large \textit{Bourse de Casablanca}}\\[1.5cm]
+  {\large Encadrante professionnelle :}\\[0.2cm]
+  {\large Mme. Fatima Zahra Raoui -- Bourse de Casablanca}\\[1.5cm]
 
   {\large Année universitaire : 2025--2026}
 
@@ -94,11 +103,13 @@
 
 \chapter*{Dédicaces}
 \addcontentsline{toc}{chapter}{Dédicaces}
-\textit{(À compléter.)}
+Je dédie ce travail à ma famille, pour son soutien constant, sa patience et ses encouragements tout au long de mon parcours. Je le dédie également à mes enseignants, qui ont contribué à construire les bases scientifiques et méthodologiques nécessaires à la réalisation de ce projet, ainsi qu'à toutes les personnes qui ont cru en ma capacité à mener ce travail à terme.
 
 \chapter*{Remerciements}
 \addcontentsline{toc}{chapter}{Remerciements}
-Je remercie chaleureusement l'équipe de la Bourse de Casablanca pour l'accueil, la disponibilité et la transmission du savoir-faire métier. Je remercie également mon encadrant(e) académique pour le suivi, les relectures et les orientations méthodologiques.
+Je remercie tout d'abord la Direction de la Bourse de Casablanca pour m'avoir accueilli dans un environnement professionnel riche, exigeant et formateur. Mes remerciements s'adressent particulièrement à Mme. Fatima Zahra Raoui, mon encadrante professionnelle, pour sa disponibilité, ses orientations techniques et ses retours constructifs durant toute la période du projet.
+
+Je remercie également Pr. Hatim Lechguar, mon encadrant pédagogique, pour son accompagnement académique, ses conseils méthodologiques et son suivi. Enfin, je remercie l'ensemble des équipes techniques et métiers rencontrées à la Bourse de Casablanca, ainsi que ma famille et mes proches pour leur soutien moral.
 
 \chapter*{Résumé}
 \addcontentsline{toc}{chapter}{Résumé}
@@ -109,7 +120,12 @@ Ce mémoire présente la conception et la réalisation d'un système intelligent
 
 \chapter*{Abstract}
 \addcontentsline{toc}{chapter}{Abstract}
-\textit{(English abstract to be completed.)}
+This final-year project, carried out at the Casablanca Stock Exchange, presents the design and implementation of an intelligent market surveillance system based on market and microstructure data. The proposed solution uses 2025 historical data including indices, prices, volumes and intraday transactions. It computes multi-level indicators for the global market, individual instruments and order flow, then detects anomalies through robust statistical methods and unsupervised Machine Learning models, namely Isolation Forest and Autoencoder.
+
+The results are delivered through a multipage Streamlit dashboard that provides market KPIs, stress score, instrument profiles, alert filtering, Machine Learning views, Excel import and optional critical alert notifications. The system produced a reproducible analytical pipeline from Excel files to Parquet datasets and interactive visualizations. Its main limitations are the batch architecture and the absence of exhaustive business labels for supervised evaluation. Future work includes real-time processing, business annotation, sequential deep learning models and integration through a REST API.
+
+\vspace{0.8cm}
+\noindent\textbf{Keywords:} market surveillance, Casablanca Stock Exchange, order flow, anomaly detection, Isolation Forest, Autoencoder, Streamlit, market stress.
 
 \tableofcontents
 \listoffigures
@@ -139,14 +155,18 @@ Les objectifs principaux sont :
 \end{itemize}
 
 \section{Démarche et organisation du document}
-Le travail est organisé en phases successives : exploration, indicateurs, détection statistique, interface, puis Machine Learning. Le \cref{chap:etat_art} présente les concepts. Le \cref{chap:donnees} détaille les données. Le \cref{chap:methodo} expose la méthodologie mathématique. Le \cref{chap:real} décrit la réalisation logicielle. Le \cref{chap:resultats} analyse les résultats. Le \cref{chap:concl} conclut et ouvre les perspectives.
+Le travail est organisé en phases successives : exploration, indicateurs, détection statistique, interface, puis Machine Learning. Le chapitre~\ref{chap:etat_art} présente les concepts. Le chapitre~\ref{chap:donnees} détaille les données. Le chapitre~\ref{chap:methodo} expose la méthodologie mathématique. Le chapitre~\ref{chap:real} décrit la réalisation logicielle. Le chapitre~\ref{chap:resultats} analyse les résultats. Le chapitre~\ref{chap:concl} conclut et ouvre les perspectives.
 
 %==============================================================================
 \chapter{Cadre institutionnel et analyse des besoins}
 \label{chap:cadre}
 
 \section{Présentation de la Bourse de Casablanca}
-\textit{(À compléter : missions, place dans le système financier marocain, rôle de la surveillance.)}
+La Bourse de Casablanca constitue l'infrastructure centrale du marché boursier marocain. Elle assure l'organisation, la gestion et le développement du marché des valeurs mobilières cotées, en mettant à disposition des intervenants un cadre de négociation structuré, transparent et sécurisé. Son rôle dépasse la simple confrontation des ordres : elle contribue à la liquidité du marché, à la diffusion de l'information financière et à la confiance des investisseurs.
+
+Dans un contexte de digitalisation des marchés financiers, la surveillance devient une fonction stratégique. Elle vise à identifier les comportements anormaux, les ruptures de liquidité, les mouvements de prix atypiques ou les déséquilibres importants dans les flux d'ordres. Cette mission nécessite des outils capables d'exploiter des données hétérogènes, de synthétiser l'information en indicateurs fiables et de produire des alertes interprétables par les équipes métier.
+
+Le présent projet s'inscrit dans cette logique : il propose un système analytique permettant de transformer les données disponibles de la Bourse de Casablanca en signaux de surveillance, en combinant indicateurs financiers, méthodes statistiques et modèles d'apprentissage non supervisé.
 
 \section{Besoins fonctionnels}
 \begin{itemize}
@@ -154,11 +174,14 @@ Le travail est organisé en phases successives : exploration, indicateurs, déte
   \item analyser chaque \textbf{instrument} (rendement, volatilité, liquidité, spread) ;
   \item exploiter le \textbf{flux d'ordres intraday} (déséquilibre, intensité des transactions, VWAP) ;
   \item produire des \textbf{alertes} hiérarchisées (sévérité) ;
-  \item permettre l'\textbf{import} d'un nouveau fichier Excel de même structure.
+  \item permettre l'\textbf{import} d'un nouveau fichier Excel de même structure ;
+  \item visualiser les résultats dans une interface accessible aux analystes ;
+  \item filtrer, consulter et exporter les anomalies détectées ;
+  \item envoyer, lorsque la configuration est disponible, des notifications pour les alertes critiques.
 \end{itemize}
 
 \section{Besoins non fonctionnels}
-Performance de rechargement (cache Parquet), reproductibilité des calculs, modularité du code, ergonomie du dashboard, traçabilité des exports (CSV/Excel).
+Les besoins non fonctionnels concernent principalement la performance, la robustesse et l'exploitabilité du système. Le recours aux fichiers Parquet permet de réduire les temps de rechargement par rapport à une lecture directe du fichier Excel. La séparation entre les modules de calcul dans \texttt{src/} et l'interface Streamlit garantit une meilleure maintenabilité. Enfin, les exports CSV/Excel et les jeux de données intermédiaires assurent une traçabilité utile pour la validation métier.
 
 \section{Contraintes}
 Données confidentielles, formats imposés par l'entreprise, absence de labels d'anomalies pour l'apprentissage supervisé, contraintes de temps de stage.
@@ -184,7 +207,24 @@ Python (pandas, numpy, scipy, scikit-learn, tensorflow), visualisation (matplotl
 \label{chap:donnees}
 
 \section{Source principale}
-Le fichier \texttt{DATASET-2025.xlsx} contient notamment les feuilles : Indicateurs, Indices, Cours, Intraday. Chaque feuille a été analysée pour identifier les clés temporelles (\texttt{Jour}), les identifiants de titre (\texttt{Ticker}) et les champs de prix/volume.
+Le fichier \texttt{DATASET-2025.xlsx} contient notamment les feuilles : Indicateurs, Indices, Cours et Intraday. Chaque feuille a été analysée pour identifier les clés temporelles (\texttt{Jour}), les identifiants de titre (\texttt{Ticker}) et les champs de prix/volume.
+
+Le périmètre exploité couvre 247 séances de l'année 2025 et 80 instruments. Cette couverture permet de construire une base suffisante pour observer les régimes de marché, les variations de liquidité et les signaux de microstructure sur une période complète.
+
+\begin{table}[H]
+  \centering
+  \caption{Structure fonctionnelle du fichier de données utilisé}
+  \begin{tabular}{lll}
+    \toprule
+    Feuille & Contenu principal & Utilisation dans le projet \\
+    \midrule
+    \texttt{Indices} & MASI, volumes, séries marché & Indicateurs globaux et stress \\
+    \texttt{Cours} & Prix, volumes, informations titres & Analyse par instrument \\
+    \texttt{Indicateurs} & Variables complémentaires & Enrichissement et contrôles \\
+    \texttt{Intraday} & Transactions et flux d'ordres & OIR, OAR, VWAP, anomalies micro \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \section{Nettoyage et normalisation}
 Le module \texttt{src/data\_loader.py} assure :
@@ -198,6 +238,23 @@ Le module \texttt{src/data\_loader.py} assure :
 
 \section{Mise en cache}
 Les jeux enrichis sont exportés en Parquet pour accélérer les notebooks et l'application.
+
+\begin{table}[H]
+  \centering
+  \caption{Principaux fichiers générés par le pipeline}
+  \begin{tabular}{ll}
+    \toprule
+    Fichier & Rôle \\
+    \midrule
+    \texttt{market\_indicators.parquet} & Indicateurs marché et stress \\
+    \texttt{instrument\_indicators.parquet} & Indicateurs par instrument \\
+    \texttt{orderflow\_indicators.parquet} & Indicateurs intraday et flux d'ordres \\
+    \texttt{all\_anomalies.parquet} & Anomalies consolidées \\
+    \texttt{ml\_anomalies.parquet} & Résultats des modèles ML \\
+    \texttt{alert\_scores.parquet} & Scores d'alerte et sévérités \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \begin{figure}[H]
   \centering
@@ -282,7 +339,7 @@ Les seuils de sévérité finale ML sont appliqués sur ce score combiné.
 \end{itemize}
 
 \section{Phase 1 --- Exploration}
-Notebook \texttt{01\_exploration.ipynb} : distributions, premières agrégations, contrôle qualité. Exemple de figure : corrélations (\cref{fig:corr}).
+Notebook \texttt{01\_exploration.ipynb} : distributions, premières agrégations, contrôle qualité. Exemple de figure : corrélations (figure~\ref{fig:corr}).
 
 \section{Phase 2 --- Indicateurs}
 Module \texttt{src/indicators.py}. Figures illustratives :
@@ -330,6 +387,53 @@ Répertoire \texttt{app/} : \texttt{Accueil.py} (accueil), pages \texttt{1\_Marc
 
 Le fichier \texttt{run\_app.bat} lance Streamlit depuis l'environnement approprié.
 
+L'interface a été conçue comme un outil de consultation opérationnelle : elle ne se limite pas à afficher les graphiques produits par les notebooks, mais organise les résultats selon les besoins de l'analyste. Le menu latéral permet de naviguer entre la vue d'ensemble, l'analyse marché, l'analyse par instrument, le centre d'alertes, l'import de données et la détection Machine Learning.
+
+\begin{figure}[H]
+  \centering
+  \fig[width=0.95\textwidth]{screen_accueil.jpeg}
+  \caption{Page d'accueil de l'application : KPIs 2025, score de stress global et évolution temporelle des composantes de stress.}
+  \label{fig:screen_accueil}
+\end{figure}
+
+La page d'accueil donne une synthèse rapide de l'état du marché : niveau du MASI, nombre de séances analysées, instruments suivis, volume récent, alertes critiques et modérées. Le score de stress agrège la volatilité, la largeur de marché et le déséquilibre moyen des flux d'ordres afin de produire un indicateur unique de tension.
+
+\begin{figure}[H]
+  \centering
+  \fig[width=0.95\textwidth]{screen_instrument.jpeg}
+  \caption{Page d'analyse par instrument : profil d'un titre, indicateurs de liquidité, volatilité, RSI et séries de prix.}
+  \label{fig:screen_instrument}
+\end{figure}
+
+La page instrument permet d'étudier un titre isolé. Elle affiche le cours de clôture, la volatilité glissante, le volume relatif, le RSI, le spread moyen et le turnover. Cette vue est importante pour comprendre si une alerte provient d'un mouvement global de marché ou d'un comportement propre à un titre.
+
+\begin{figure}[H]
+  \centering
+  \fig[width=0.95\textwidth]{screen_alertes_heatmap.jpeg}
+  \caption{Centre d'alertes : filtres, indicateurs agrégés et heatmaps des anomalies et déséquilibres de flux.}
+  \label{fig:screen_alertes}
+\end{figure}
+
+Le centre d'alertes constitue le cœur opérationnel du système. Les anomalies peuvent être filtrées par sévérité, niveau d'analyse, indicateur, instrument ou période. Les heatmaps facilitent l'identification des mois et des titres concentrant les signaux les plus importants.
+
+\begin{figure}[H]
+  \centering
+  \fig[width=0.95\textwidth]{screen_ml_global.jpeg}
+  \caption{Page de détection ML : score combiné Isolation Forest et Autoencoder au niveau marché.}
+  \label{fig:screen_ml}
+\end{figure}
+
+La page Machine Learning permet de comparer les signaux issus de l'Isolation Forest et de l'Autoencoder. Les seuils visuels facilitent la lecture des niveaux de sévérité et la comparaison avec les anomalies statistiques.
+
+\begin{figure}[H]
+  \centering
+  \fig[width=0.95\textwidth]{screen_import.jpeg}
+  \caption{Page d'import : validation d'un fichier Excel et relance du pipeline de calcul.}
+  \label{fig:screen_import}
+\end{figure}
+
+La page d'import répond à un besoin de réutilisation : un nouveau fichier respectant la même structure peut être chargé, validé puis traité afin de recalculer les indicateurs et anomalies sans intervention directe dans le code.
+
 \section{Phase 5 --- Machine Learning}
 Module \texttt{src/ml\_models.py}, notebook \texttt{04\_machine\_learning.ipynb}, sauvegardes dans \texttt{models/}.
 
@@ -366,15 +470,52 @@ Module \texttt{src/ml\_models.py}, notebook \texttt{04\_machine\_learning.ipynb}
 \section{Pipeline d'upload}
 La fonction \texttt{process\_uploaded\_file} rejoue : chargement Excel, validation, calculs d'indicateurs, détection, puis affichage dans l'interface.
 
+\section{Notifications critiques}
+Le module \texttt{critical\_alert\_notifier.py} complète le centre d'alertes par un mécanisme de notification optionnel. Lorsque les variables d'environnement sont configurées, les alertes critiques peuvent être transmises par e-mail ou Slack. Une déduplication par fichier JSON évite de renvoyer plusieurs fois la même alerte, ce qui rend le mécanisme plus adapté à un usage opérationnel.
+
 %==============================================================================
 \chapter{Résultats et discussion}
 \label{chap:resultats}
 
 \section{Résultats sur les indicateurs}
-Les indicateurs permettent une lecture cohérente à trois niveaux : tendance et volatilité du MASI, profils par titre, et signaux intraday (OIR, OAR, VWAP).
+Les indicateurs permettent une lecture cohérente à trois niveaux : tendance et volatilité du MASI, profils par titre, et signaux intraday (OIR, OAR, VWAP). Le pipeline a été appliqué sur 247 séances et 80 instruments, ce qui permet d'obtenir des séries suffisamment longues pour calculer des indicateurs glissants, comparer les titres et construire des seuils empiriques.
+
+\begin{table}[H]
+  \centering
+  \caption{Synthèse quantitative du périmètre analysé}
+  \begin{tabular}{lr}
+    \toprule
+    Indicateur de périmètre & Valeur \\
+    \midrule
+    Séances analysées & 247 \\
+    Instruments analysés & 80 \\
+    Anomalies consolidées & 18\,797 \\
+    Alertes critiques & 1\,839 \\
+    Alertes modérées & 4\,747 \\
+    Instruments alertés & 78 \\
+    Anomalies ML & 1\,752 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \section{Résultats de la détection statistique}
-La multiplicité des méthodes réduit le risque de sur-détection liée à un seul critère. Le consensus met en avant les situations où plusieurs tests concordent.
+La multiplicité des méthodes réduit le risque de sur-détection liée à un seul critère. Le consensus met en avant les situations où plusieurs tests concordent. Les anomalies finales sont classées en trois niveaux opérationnels : faible, modéré et critique.
+
+\begin{table}[H]
+  \centering
+  \caption{Répartition des anomalies consolidées par sévérité}
+  \begin{tabular}{lrr}
+    \toprule
+    Sévérité finale & Nombre & Part approximative \\
+    \midrule
+    Faible & 12\,211 & 65{,}0\% \\
+    Modéré & 4\,747 & 25{,}3\% \\
+    Critique & 1\,839 & 9{,}8\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Cette distribution est cohérente avec le rôle d'un système d'alerte : la majorité des signaux reste de faible intensité, tandis que les alertes critiques constituent un sous-ensemble plus restreint, prioritaire pour l'analyse métier. Les heatmaps et chronologies permettent ensuite de contextualiser les concentrations d'alertes par période ou par instrument.
 
 \begin{figure}[H]
   \centering
@@ -389,28 +530,46 @@ La multiplicité des méthodes réduit le risque de sur-détection liée à un s
 \end{figure}
 
 \section{Résultats Machine Learning}
-Les modèles non supervisés mettent en évidence des observations aux combinaisons de features atypiques. La comparaison avec la phase statistique distingue : anomalies communes, anomalies spécifiques statistiques, anomalies spécifiques ML.
+Les modèles non supervisés mettent en évidence des observations aux combinaisons de features atypiques. La comparaison avec la phase statistique distingue trois catégories : anomalies communes, anomalies spécifiques statistiques et anomalies spécifiques ML. Cette distinction est importante car une anomalie statistique peut être due à une variable isolée, tandis qu'un modèle ML peut détecter une combinaison inhabituelle de plusieurs variables.
+
+L'absence de labels métier exhaustifs empêche le calcul fiable de métriques supervisées classiques telles que précision, rappel ou AUC. L'évaluation repose donc sur l'analyse de la distribution des scores, la cohérence temporelle des alertes, la comparaison entre méthodes et l'interprétation par les analystes.
 
 \section{Limites}
-Données principalement historiques ; pas de boucle temps réel ; hyperparamètres à affiner avec retour métier ; évaluation qualitative faute de labels officiels.
+Plusieurs limites doivent être prises en compte avant une industrialisation complète :
+\begin{itemize}
+  \item \textbf{Absence de labels métier exhaustifs} : les modèles non supervisés ne peuvent pas être évalués comme des classifieurs supervisés.
+  \item \textbf{Architecture batch} : le système traite des fichiers et non un flux temps réel ; les anomalies intraday très rapides ne sont donc pas détectées instantanément.
+  \item \textbf{Calibrage des seuils} : les seuils statistiques et ML sont établis sur les données disponibles et doivent être ajustés avec les retours métier.
+  \item \textbf{Scalabilité applicative} : Streamlit est adapté au prototypage et à la démonstration, mais un déploiement multi-utilisateur nécessiterait une architecture plus robuste.
+  \item \textbf{Confidentialité} : certaines analyses doivent rester anonymisées ou limitées dans le rapport.
+\end{itemize}
 
 \section{Apports pour l'organisme d'accueil}
-Prototype opérationnel, base de code modulaire, exports exploitables, interface de démonstration pour échanges avec les équipes surveillance.
+Le projet apporte une base concrète pour renforcer la surveillance analytique :
+\begin{itemize}
+  \item une chaîne reproductible Excel $\rightarrow$ Parquet $\rightarrow$ Streamlit ;
+  \item une couverture multi-niveaux : marché, instrument et flux d'ordres ;
+  \item une combinaison de méthodes statistiques interprétables et de modèles ML complémentaires ;
+  \item des alertes historisées, filtrables et exportables ;
+  \item une interface de démonstration permettant de discuter les résultats avec les équipes de surveillance.
+\end{itemize}
 
 %==============================================================================
 \chapter{Conclusion et perspectives}
 \label{chap:concl}
 
 \section{Bilan}
-Le projet a permis de mettre en œuvre une chaîne complète de surveillance intelligente : données $\rightarrow$ indicateurs $\rightarrow$ anomalies statistiques $\rightarrow$ Machine Learning $\rightarrow$ visualisation et import de nouveaux fichiers.
+Ce projet a permis de concevoir et de mettre en œuvre une chaîne complète de surveillance intelligente : données $\rightarrow$ indicateurs $\rightarrow$ anomalies statistiques $\rightarrow$ Machine Learning $\rightarrow$ visualisation et import de nouveaux fichiers. L'approche retenue répond à la problématique initiale en transformant des données hétérogènes en signaux exploitables par les équipes de surveillance.
+
+Le système obtenu combine trois qualités essentielles : l'interprétabilité des indicateurs financiers, la robustesse des méthodes statistiques et la capacité des modèles non supervisés à repérer des combinaisons atypiques. L'application Streamlit rend ces résultats accessibles à travers des vues synthétiques, des filtres opérationnels et des exports.
 
 \section{Perspectives}
 \begin{itemize}
-  \item intégration temps réel (streaming, bus de messages) ;
-  \item moteur d'alertes avec notifications ;
-  \item boucle de validation analyste et suivi des faux positifs ;
-  \item explainabilité avancée et calibration des seuils ;
-  \item déploiement conteneurisé (Docker) et CI/CD.
+  \item \textbf{Étiquetage métier} : intégrer une interface d'annotation afin de construire progressivement un jeu de labels validés par les analystes.
+  \item \textbf{Temps réel} : remplacer le traitement batch par un pipeline de streaming pour détecter les signaux intraday en continu.
+  \item \textbf{Deep learning séquentiel} : tester un LSTM-Autoencoder pour capturer les dépendances temporelles dans les séries de transactions.
+  \item \textbf{API REST} : exposer les alertes et indicateurs à d'autres systèmes internes.
+  \item \textbf{Industrialisation} : ajouter authentification, logs applicatifs, supervision, conteneurisation et tests automatisés.
 \end{itemize}
 
 %==============================================================================
@@ -423,7 +582,26 @@ Le projet a permis de mettre en œuvre une chaîne complète de surveillance int
 J. Hasbrouck,
 \textit{Measuring the Information Content of Stock Trades},
 Journal of Finance, 1991.
-\textit{(Exemple de référence microstructure ; à adapter selon ta bibliographie réelle.)}
+
+\bibitem{ohara1995}
+M. O'Hara,
+\textit{Market Microstructure Theory},
+Blackwell Publishers, 1995.
+
+\bibitem{harris2003}
+L. Harris,
+\textit{Trading and Exchanges: Market Microstructure for Practitioners},
+Oxford University Press, 2003.
+
+\bibitem{isolationforest}
+F. T. Liu, K. M. Ting and Z.-H. Zhou,
+\textit{Isolation Forest},
+Proceedings of the IEEE International Conference on Data Mining, 2008.
+
+\bibitem{chandola2009}
+V. Chandola, A. Banerjee and V. Kumar,
+\textit{Anomaly Detection: A Survey},
+ACM Computing Surveys, 2009.
 
 \bibitem{sklearn}
 Pedregosa et al.,
